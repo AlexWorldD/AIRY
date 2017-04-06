@@ -15,29 +15,12 @@ import matplotlib.pyplot as plt
 ID = 'ID (автономер в базе)'
 
 if __name__ == '__main__':
-    # Loading data from Excel file
 
     start = timer()
     # Setting required priorities for features
     priorities = ['Важный',
                   'Средняя']
-
-    # Loading from original files:
-    # TODO try to fix encoding
-    # data_features = load_features(priorities=priorities)
-    # data_features.to_csv('../data/tmp/F13.csv', encoding='cp1251')
-    # data_target = load_targets()
-    # data_target.to_csv('../data/tmp/T13.csv', encoding='cp1251')
-
-    # Loading from steady-files:
-    data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
-                                index_col=0)
-    data_target = pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
-                              index_col=0)
-
-    print(data_features)
-    # data = data_features.merge(data_target,
-    #                            on='ID (автономер в базе)')
-    # A quick look to target-data:
-    # print(data(10))
+    # TODO DROP the ID-column
+    train_data, train_target = load_data()
+    print(train_data)
     print('Elapsed time:', timer() - start)

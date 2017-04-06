@@ -22,6 +22,7 @@ import pandas as pd
 # 'Район проживания (рег)', 'Самые сильные/слабые личные качества', 'Семейное положение',
 # 'Учебное заведение', 'Хобби', 'Хронические заболевания', 'Что привлекает в работе']
 
+
 def load_features(path='../data/Features2013.xlsx',
                   priorities=['Важный'],
                   forceAll=False):
@@ -45,17 +46,18 @@ def load_features(path='../data/Features2013.xlsx',
         column_names[priority] = list(list2[list2['Важность (по мнению МЗ)']
                                             == priority]['Название поля'])
 
-    # Collecting required column names
+    # Collecting required columns
     if forceAll:
-        data = pd.read_excel(path, index_col='ID (автономер в базе)')
+        data = pd.read_excel(path)
     else:
         # TODO add exception for Unknown priority
         required_priorities = list()
+        required_priorities.append('ID (автономер в базе)')
         for priority in priorities:
             required_priorities.extend(column_names[priority])
 
         # Loading data with staff features
-        data = pd.read_excel(path, index_col='ID (автономер в базе)')[required_priorities]
+        data = pd.read_excel(path)[required_priorities]
     return data
 
 
@@ -97,3 +99,27 @@ def load_targets(path='../data/Target2013.xlsx',
         # Loading data with staff working-results
         data = pd.read_excel(path)[required_priorities]
     return data
+
+def load_data():
+    """Function for loading data and returning data_features and data_target DataFrame"""
+    # Loading from original Excel files:
+    # TODO try to fix encoding
+    # data_features = load_features(priorities=priorities)
+    # data_features.to_csv('../data/tmp/F13.csv', encoding='cp1251')
+    # data_target = load_targets()
+    # data_target.to_csv('../data/tmp/T13.csv', encoding='cp1251')
+
+    # Loading from steady-files:
+    data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
+                                index_col=0)
+    data_target = pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
+                              index_col=0)
+
+    data = data_features.merge(data_target,
+                               on='ID (автономер в базе)')
+    # print('--------------Features--------', '\n', data_features)
+    # print('--------------Target--------', '\n', data_target)
+    # print(data)
+    X = data[list(data_features)]
+    Y = data[list(data_target)]
+    return X, Y
