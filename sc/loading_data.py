@@ -57,3 +57,43 @@ def load_features(path='../data/Features2013.xlsx',
         # Loading data with staff features
         data = pd.read_excel(path, index_col='ID (автономер в базе)')[required_priorities]
     return data
+
+
+# Function for loading RAW target
+
+def load_targets(path='../data/Target2013.xlsx',
+                  priorities=['Высокая'],
+                  forceAll=False):
+    """Load target-data with required columns names"""
+    # Setting possible priorities for features
+
+    # TODO Add scanning for unique values of priority
+    # Create a structure for our column names with their priorities
+    column_names = dict()
+
+    # Loading all possible priorities for this data
+    list2 = pd.read_excel(path,
+                          sheetname=1)
+    list2['Важность (по мнению МЗ)'].fillna('NaN',
+                                            inplace=True)
+    # Getting unique values of priorities
+    possible_priorities = list2['Важность (по мнению МЗ)'].unique()
+
+    # Collecting all column names
+    for priority in possible_priorities:
+        column_names[priority] = list(list2[list2['Важность (по мнению МЗ)']
+                                            == priority]['Поле'])
+    # Collecting required column names
+    if forceAll:
+        data = pd.read_excel(path)
+    else:
+        # TODO add exception for Unknown priority
+        required_priorities = list()
+        # TODO add RE for extraction same priority together
+        required_priorities.extend(['ID (автономер в базе)', 'Явка на смене (Смена)'])
+        for priority in priorities:
+            required_priorities.extend(column_names[priority])
+
+        # Loading data with staff working-results
+        data = pd.read_excel(path)[required_priorities]
+    return data
