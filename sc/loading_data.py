@@ -129,7 +129,7 @@ def load_data():
     X = data[list(data_features)]
     Y = data[list(data_target)]
     temp_names = list(Y)
-    Y['QualityRatio'] = Y.progress_apply(quality_ratio2, axis=1)
+    Y['QualityRatio'] = Y.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9))
     Y.drop(temp_names, axis=1, inplace=True)
     # print(Y)
     return X, Y
@@ -162,18 +162,18 @@ def quality_ratio(row):
 
 
 # Another if-else structure, looks better:
-def quality_ratio2(row):
+def quality_ratio2(row, qscan_min=0.5, qscan_max=0.85):
     """Special function for calculating QualityRatio for staff"""
     if row['Явка на смене (Смена)'] == 'Да':
         if row['QTotalCalcType'] == 'По ставке':
             return 1
         elif row['QTotalCalcType'] == 'По выработке':
-            if row['Выработка % от нормы по сканированию (Qscan)'] >= 0.85:
+            if row['Выработка % от нормы по сканированию (Qscan)'] >= qscan_max:
                 return 1
-            elif row['Выработка % от нормы по сканированию (Qscan)'] < 0.5:
+            elif row['Выработка % от нормы по сканированию (Qscan)'] < qscan_min:
                 return 0
             else:
-                value = (row['Выработка % от нормы по сканированию (Qscan)'] - 0.5) / 0.35
+                value = (row['Выработка % от нормы по сканированию (Qscan)'] - qscan_min) / (qscan_max-qscan_min)
                 return value
     elif row['Статус смены (Смена)'] == 'Подтвержден':
         return 0
