@@ -64,8 +64,8 @@ def load_features(path='../data/Features2013.xlsx',
 # Function for loading RAW target
 
 def load_targets(path='../data/Target2013.xlsx',
-                  priorities=['Высокая'],
-                  forceAll=False):
+                 priorities=['Высокая'],
+                 forceAll=False):
     """Load target-data with required columns names"""
     # Setting possible priorities for features
 
@@ -99,6 +99,7 @@ def load_targets(path='../data/Target2013.xlsx',
         # Loading data with staff working-results
         data = pd.read_excel(path)[required_priorities]
     return data
+
 
 def load_data():
     """Function for loading data and returning data_features and data_target DataFrame"""
