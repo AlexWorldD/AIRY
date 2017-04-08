@@ -3,6 +3,10 @@
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm, tqdm_pandas, trange
+
+# Disable SettingWithCopyWarning
+pd.options.mode.chained_assignment = None  # default='warn'
 
 
 # All column's names:
@@ -22,7 +26,7 @@ import pandas as pd
 # 'Район проживания (рег)', 'Самые сильные/слабые личные качества', 'Семейное положение',
 # 'Учебное заведение', 'Хобби', 'Хронические заболевания', 'Что привлекает в работе']
 
-
+# ----------------------------------------- Loading data -----------------------------------------
 def load_features(path='../data/Features2013.xlsx',
                   priorities=['Важный'],
                   forceAll=False):
@@ -121,6 +125,55 @@ def load_data():
     # print('--------------Features--------', '\n', data_features)
     # print('--------------Target--------', '\n', data_target)
     # print(data)
+    tqdm.pandas(desc="Calculate QualityRatio for staff")
     X = data[list(data_features)]
     Y = data[list(data_target)]
+    temp_names = list(Y)
+    Y['QualityRatio'] = Y.progress_apply(quality_ratio2, axis=1)
+    Y.drop(temp_names, axis=1, inplace=True)
+    # print(Y)
     return X, Y
+
+
+# ----------------------------------------- Munging data -----------------------------------------
+# 'Явка на смене (Смена)', 'Востребована оплата по смене', 'Выработка % от нормы по сканированию (Qscan)',
+# 'Выработка % от нормы по ручному пересчету (QSP)', 'QTotalCalcType', 'QTotal', 'Ошибок сканирования (штук)',
+# 'Статус смены (Смена)'
+# Обращение по индекса не только не ускоряет процесс, но и замедляет его на 20%.
+def quality_ratio(row):
+    """Special function for calculating QualityRatio for staff"""
+    if row['QTotalCalcType'] == 'По ставке':
+        if row['Явка на смене (Смена)'] == 'Да':
+            return 1
+        elif row['Статус смены (Смена)'] == 'Подтвержден':
+            return 0
+        else:
+            return 0.5
+    elif row['QTotalCalcType'] == 'По выработке' and row['Явка на смене (Смена)'] == 'Да':
+        if row['Выработка % от нормы по сканированию (Qscan)'] >= 0.85:
+            return 1
+        elif row['Выработка % от нормы по сканированию (Qscan)'] < 0.5:
+            return 0
+        else:
+            value = (row['Выработка % от нормы по сканированию (Qscan)'] - 0.5) / 0.35
+            return value
+    else:
+        return 0
+
+
+# Another if-else structure, looks better:
+def quality_ratio2(row):
+    """Special function for calculating QualityRatio for staff"""
+    if row['Явка на смене (Смена)'] == 'Да':
+        if row['QTotalCalcType'] == 'По ставке':
+            return 1
+        elif row['QTotalCalcType'] == 'По выработке':
+            if row['Выработка % от нормы по сканированию (Qscan)'] >= 0.85:
+                return 1
+            elif row['Выработка % от нормы по сканированию (Qscan)'] < 0.5:
+                return 0
+            else:
+                value = (row['Выработка % от нормы по сканированию (Qscan)'] - 0.5) / 0.35
+                return value
+    elif row['Статус смены (Смена)'] == 'Подтвержден':
+        return 0
