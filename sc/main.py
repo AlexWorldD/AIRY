@@ -22,7 +22,9 @@ if __name__ == '__main__':
     # update_csv()
     # TODO DROP the ID-column
     train_data, train_target = load_data()
-    print(train_target)
+    missing_data(train_target)
+    tt = load_features(forceAll=True)
+    missing_data(tt)
     # 'Явка на смене (Смена)', 'Востребована оплата по смене', 'Выработка % от нормы по сканированию (Qscan)',
     # 'Выработка % от нормы по ручному пересчету (QSP)', 'QTotalCalcType', 'QTotal', 'Ошибок сканирования (штук)',
     # 'Статус смены (Смена)'

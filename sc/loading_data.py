@@ -119,6 +119,7 @@ def update_csv():
 
 def modify_target(data_target):
     """Special function for modification data from the 2nd (Target) file"""
+    # TODO add cleaning from Peaks
     temp_names = list(data_target)
     tqdm.pandas(desc="Calculate QualityRatio for staff")
     # Calculate QualityRatio:
@@ -154,7 +155,7 @@ def load_data():
     data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
                                 index_col=0)
     data_target = modify_target(pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
-                              index_col=0))
+                                            index_col=0))
 
     # TODO add cleaning data!!
     # Merge 2 parts of data to one DataFrame
@@ -213,13 +214,15 @@ def quality_ratio2(row, qscan_min=0.5, qscan_max=0.85, mode='QTotal'):
             if row['QTotalCalcType'] == 'По ставке':
                 return 1
             elif row['QTotalCalcType'] == 'По выработке':
-                if row[required_title] >= qscan_max:
-                    return 1
-                elif row[required_title] < qscan_min:
-                    return 0
-                else:
-                    value = (row[required_title] - qscan_min) / (qscan_max - qscan_min)
-                    return value
+                # Additional statement for skipping HighPeeks:
+                if row[required_title] < 15:
+                    if row[required_title] >= qscan_max:
+                        return 1
+                    elif row[required_title] < qscan_min:
+                        return 0
+                    else:
+                        value = (row[required_title] - qscan_min) / (qscan_max - qscan_min)
+                        return value
         elif row['Статус смены (Смена)'] == 'Подтвержден':
             return 0
     elif row['Тип биллинга'] == 'Штрафной':
@@ -240,10 +243,10 @@ def plot_hist(x, mode='QTotal'):
 
 def missing_data(data):
     """Analysis data and find missing values"""
-    counts = data.describe().loc[:'count'].T
+    counts = data.describe(include='all').loc[:'count'].T
     print(counts)
     total = len(data)
     missed_data = counts[counts['count'] <= total].apply(lambda tmp:
-                                                        (total - tmp) / total)['count']
+                                                         (total - tmp) / total)['count']
     print("Количество пропусков: ")
     print(missed_data.sort_values(ascending=False))
