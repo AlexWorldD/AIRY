@@ -19,10 +19,16 @@ if __name__ == '__main__':
     # Setting required priorities for features
     priorities = ['Важный',
                   'Средняя']
+    # update_csv()
     # TODO DROP the ID-column
     train_data, train_target = load_data()
+    print(train_target)
     # 'Явка на смене (Смена)', 'Востребована оплата по смене', 'Выработка % от нормы по сканированию (Qscan)',
     # 'Выработка % от нормы по ручному пересчету (QSP)', 'QTotalCalcType', 'QTotal', 'Ошибок сканирования (штук)',
     # 'Статус смены (Смена)'
-    print(train_target.describe())
+
+    # data_target = pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
+    #                           index_col=0)
+    # print(list(data_target))
+    # missing_data(data_target)
     print('Elapsed time:', timer() - start)

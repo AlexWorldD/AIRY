@@ -97,13 +97,48 @@ def load_targets(path='../data/Target2013.xlsx',
         # TODO add exception for Unknown priority
         required_priorities = list()
         # TODO add RE for extraction same priority together
-        required_priorities.extend(['ID (автономер в базе)', 'Явка на смене (Смена)'])
+        required_priorities.extend(['ID (автономер в базе)', 'Явка на смене (Смена)', 'Тип биллинга'])
         for priority in priorities:
             required_priorities.extend(column_names[priority])
 
         # Loading data with staff working-results
         data = pd.read_excel(path)[required_priorities]
     return data
+
+
+def update_csv():
+    """Temporary function for updating temporary CSV files"""
+    priorities = ['Важный',
+                  'Средняя']
+    data_features = load_features(priorities=priorities)
+    data_features.to_csv('../data/tmp/F13.csv', encoding='cp1251')
+    data_target = load_targets()
+    data_target.to_csv('../data/tmp/T13.csv', encoding='cp1251')
+    print('Update CSVs completed!')
+
+
+def modify_target(data_target):
+    """Special function for modification data from the 2nd (Target) file"""
+    temp_names = list(data_target)
+    tqdm.pandas(desc="Calculate QualityRatio for staff")
+    # Calculate QualityRatio:
+    data_target['QualityRatioTotal'] = data_target.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9))
+
+    # Additional metrics of Quality.
+    # data_target['QualityRatioQSP'] = data_target.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9), mode='QSP')
+    # data_target['QualityRatioQScan'] = data_target.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9), mode='QScan')
+
+    # Dropping unnecessary columns:
+    data_target.drop(temp_names[1:], axis=1, inplace=True)
+    temp_names = list(data_target)
+    # Delete null-values of QualityRatio.
+    data_target.dropna(how='any', subset=temp_names[1:], inplace=True)
+
+    # Draw plots of distribution:
+    # plot_hist(data_target['QualityRatioTotal'])
+    # plot_hist(data_target['QualityRatioQSP'], 'QSP')
+    # plot_hist(data_target['QualityRatioQScan'], 'QScan')
+    return data_target
 
 
 def load_data():
@@ -118,28 +153,19 @@ def load_data():
     # Loading from steady-files:
     data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
                                 index_col=0)
-    data_target = pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
-                              index_col=0)
+    data_target = modify_target(pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
+                              index_col=0))
 
+    # TODO add cleaning data!!
+    # Merge 2 parts of data to one DataFrame
     data = data_features.merge(data_target,
                                on='ID (автономер в базе)')
     # print('--------------Features--------', '\n', data_features)
     # print('--------------Target--------', '\n', data_target)
     # print(data)
-    tqdm.pandas(desc="Calculate QualityRatio for staff")
     X = data[list(data_features)]
-    Y = data[list(data_target)]
-    temp_names = list(Y)
-    Y['QualityRatioTotal'] = Y.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9))
+    Y = data[list(data_target)[1:]]
 
-    # Additional metrics of Quality and plots.
-    # Y['QualityRatioQSP'] = Y.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9), mode='QSP')
-    # Y['QualityRatioQScan'] = Y.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9), mode='QScan')
-    # plot_hist(Y['QualityRatioTotal'].dropna())
-    # plot_hist(Y['QualityRatioQSP'].dropna(), 'QSP')
-    # plot_hist(Y['QualityRatioQScan'].dropna(), 'QScan')
-
-    Y.drop(temp_names, axis=1, inplace=True)
     # print(Y)
     return X, Y
 
@@ -182,19 +208,24 @@ def quality_ratio2(row, qscan_min=0.5, qscan_max=0.85, mode='QTotal'):
     else:
         required_title = 'QTotal'
     # Working:
-    if row['Явка на смене (Смена)'] == 'Да':
-        if row['QTotalCalcType'] == 'По ставке':
-            return 1
-        elif row['QTotalCalcType'] == 'По выработке':
-            if row[required_title] >= qscan_max:
+    if row['Тип биллинга'] == 'Первичный':
+        if row['Явка на смене (Смена)'] == 'Да':
+            if row['QTotalCalcType'] == 'По ставке':
                 return 1
-            elif row[required_title] < qscan_min:
-                return 0
-            else:
-                value = (row[required_title] - qscan_min) / (qscan_max - qscan_min)
-                return value
-    elif row['Статус смены (Смена)'] == 'Подтвержден':
+            elif row['QTotalCalcType'] == 'По выработке':
+                if row[required_title] >= qscan_max:
+                    return 1
+                elif row[required_title] < qscan_min:
+                    return 0
+                else:
+                    value = (row[required_title] - qscan_min) / (qscan_max - qscan_min)
+                    return value
+        elif row['Статус смены (Смена)'] == 'Подтвержден':
+            return 0
+    elif row['Тип биллинга'] == 'Штрафной':
         return 0
+    else:
+        return 1
 
 
 def plot_hist(x, mode='QTotal'):
@@ -205,3 +236,14 @@ def plot_hist(x, mode='QTotal'):
     # plt.text(60, .025, r'$\mu=100,\ \sigma=15$')
     plt.grid(True)
     plt.show()
+
+
+def missing_data(data):
+    """Analysis data and find missing values"""
+    counts = data.describe().loc[:'count'].T
+    print(counts)
+    total = len(data)
+    missed_data = counts[counts['count'] <= total].apply(lambda tmp:
+                                                        (total - tmp) / total)['count']
+    print("Количество пропусков: ")
+    print(missed_data.sort_values(ascending=False))
