@@ -10,7 +10,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold, cross_val_score
 from timeit import default_timer as timer
-import matplotlib.pyplot as plt
 
 # As CONST_VAR for linking features and target
 ID = 'ID (автономер в базе)'
@@ -25,5 +24,5 @@ if __name__ == '__main__':
     # 'Явка на смене (Смена)', 'Востребована оплата по смене', 'Выработка % от нормы по сканированию (Qscan)',
     # 'Выработка % от нормы по ручному пересчету (QSP)', 'QTotalCalcType', 'QTotal', 'Ошибок сканирования (штук)',
     # 'Статус смены (Смена)'
-    print(train_target)
+    print(train_target.describe())
     print('Elapsed time:', timer() - start)

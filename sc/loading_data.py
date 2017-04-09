@@ -4,6 +4,7 @@
 import numpy as np
 import pandas as pd
 from tqdm import tqdm, tqdm_pandas, trange
+import matplotlib.pyplot as plt
 
 # Disable SettingWithCopyWarning
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -129,7 +130,15 @@ def load_data():
     X = data[list(data_features)]
     Y = data[list(data_target)]
     temp_names = list(Y)
-    Y['QualityRatio'] = Y.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9))
+    Y['QualityRatioTotal'] = Y.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9))
+
+    # Additional metrics of Quality and plots.
+    # Y['QualityRatioQSP'] = Y.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9), mode='QSP')
+    # Y['QualityRatioQScan'] = Y.progress_apply(quality_ratio2, axis=1, args=(0.5, 0.9), mode='QScan')
+    # plot_hist(Y['QualityRatioTotal'].dropna())
+    # plot_hist(Y['QualityRatioQSP'].dropna(), 'QSP')
+    # plot_hist(Y['QualityRatioQScan'].dropna(), 'QScan')
+
     Y.drop(temp_names, axis=1, inplace=True)
     # print(Y)
     return X, Y
@@ -161,19 +170,38 @@ def quality_ratio(row):
         return 0
 
 
+# TODO ask about QTotal or QScan or QSP
 # Another if-else structure, looks better:
-def quality_ratio2(row, qscan_min=0.5, qscan_max=0.85):
+def quality_ratio2(row, qscan_min=0.5, qscan_max=0.85, mode='QTotal'):
     """Special function for calculating QualityRatio for staff"""
+    # Define the work mode:
+    if mode == 'QSP':
+        required_title = 'Выработка % от нормы по ручному пересчету (QSP)'
+    elif mode == 'QScan':
+        required_title = 'Выработка % от нормы по сканированию (Qscan)'
+    else:
+        required_title = 'QTotal'
+    # Working:
     if row['Явка на смене (Смена)'] == 'Да':
         if row['QTotalCalcType'] == 'По ставке':
             return 1
         elif row['QTotalCalcType'] == 'По выработке':
-            if row['Выработка % от нормы по сканированию (Qscan)'] >= qscan_max:
+            if row[required_title] >= qscan_max:
                 return 1
-            elif row['Выработка % от нормы по сканированию (Qscan)'] < qscan_min:
+            elif row[required_title] < qscan_min:
                 return 0
             else:
-                value = (row['Выработка % от нормы по сканированию (Qscan)'] - qscan_min) / (qscan_max-qscan_min)
+                value = (row[required_title] - qscan_min) / (qscan_max - qscan_min)
                 return value
     elif row['Статус смены (Смена)'] == 'Подтвержден':
         return 0
+
+
+def plot_hist(x, mode='QTotal'):
+    plt.hist(x, 10, facecolor='g', alpha=0.75)
+    plt.xlabel(mode)
+    plt.ylabel('Counts')
+    plt.title('Histogram of Quality')
+    # plt.text(60, .025, r'$\mu=100,\ \sigma=15$')
+    plt.grid(True)
+    plt.show()
