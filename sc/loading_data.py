@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm, tqdm_pandas, trange
 import matplotlib.pyplot as plt
+import os
 
 # Disable SettingWithCopyWarning
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -141,6 +142,14 @@ def modify_target(data_target):
     # plot_hist(data_target['QualityRatioQScan'], 'QScan')
     return data_target
 
+def features_fillna(train_data):
+    """Special function for handling missing data"""
+    # Transform Birthday column to DataTime format:
+    train_data['Дата рождения'] = pd.to_datetime(train_data['Дата рождения'])
+
+    age_mask = (train_data['Возраст'].isnull()) & (train_data['Дата рождения'].notnull())
+    train_data['Возраст'][age_mask] = train_data[age_mask].apply(fix_age, axis=1)
+    return train_data
 
 def load_data():
     """Function for loading data and returning data_features and data_target DataFrame"""
@@ -168,7 +177,7 @@ def load_data():
     Y = data[list(data_target)[1:]]
 
     # print(Y)
-    return X, Y
+    return features_fillna(X), Y
 
 
 # ----------------------------------------- Munging data -----------------------------------------
@@ -231,6 +240,10 @@ def quality_ratio2(row, qscan_min=0.5, qscan_max=0.85, mode='QTotal'):
         return 1
 
 
+def fix_age(row):
+    return 2014 - row['Дата рождения'].year
+
+
 def plot_hist(x, mode='QTotal'):
     plt.hist(x, 10, facecolor='g', alpha=0.75)
     plt.xlabel(mode)
@@ -238,6 +251,9 @@ def plot_hist(x, mode='QTotal'):
     plt.title('Histogram of Quality')
     # plt.text(60, .025, r'$\mu=100,\ \sigma=15$')
     plt.grid(True)
+    if not os.path.exists('../data/plots'):
+        os.makedirs('../data/plots')
+    plt.savefig('../data/plots/Column' + str(mode) + '.png')
     plt.show()
 
 
