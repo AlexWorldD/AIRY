@@ -6,6 +6,7 @@ import pandas as pd
 from tqdm import tqdm, tqdm_pandas, trange
 import matplotlib.pyplot as plt
 import os
+from sklearn.feature_extraction import DictVectorizer
 
 # Disable SettingWithCopyWarning
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -35,6 +36,7 @@ def load_features(path='../data/Features2013.xlsx',
     """Load data with required columns names"""
     # Setting possible priorities for features
 
+    default_columns = list(['ID (автономер в базе)', 'Фамилия', 'Имя', 'Отчество'])
     # TODO Add scanning for unique values of priority
     # Create a structure for our column names with their priorities
     column_names = dict()
@@ -58,7 +60,7 @@ def load_features(path='../data/Features2013.xlsx',
     else:
         # TODO add exception for Unknown priority
         required_priorities = list()
-        required_priorities.append('ID (автономер в базе)')
+        required_priorities.extend(default_columns)
         for priority in priorities:
             required_priorities.extend(column_names[priority])
 
@@ -142,14 +144,44 @@ def modify_target(data_target):
     # plot_hist(data_target['QualityRatioQScan'], 'QScan')
     return data_target
 
+
 def features_fillna(train_data):
     """Special function for handling missing data"""
     # Transform Birthday column to DataTime format:
-    train_data['Дата рождения'] = pd.to_datetime(train_data['Дата рождения'])
+    train_data['Дата рождения'] = pd.to_datetime(train_data['Дата рождения'], errors='coerce')
 
+    # --------------------------------- FillNA ---------------------------------
+    # TODO add conversion fro age column to integer - is it necessary??
     age_mask = (train_data['Возраст'].isnull()) & (train_data['Дата рождения'].notnull())
     train_data['Возраст'][age_mask] = train_data[age_mask].apply(fix_age, axis=1)
-    return train_data
+
+    # FillNA for Patronymic
+    # TODO add cleaning from rubbish such as '---' and '0---'
+    train_data['Отчество'].fillna('Не указано', inplace=True)
+    # FillNA for family
+    train_data['Семейное положение'].fillna('Не указано', inplace=True)
+    # FillNA for Attraction in work: 1 if some text was typed and 0 otherwise.
+    # TODO add bag of words - is it necessary??
+    train_data['Что привлекает в работе'][train_data['Что привлекает в работе'].notnull()] = \
+        train_data['Что привлекает в работе'].notnull().apply(lambda t: 0.5)
+    train_data['Что привлекает в работе'].fillna(0, inplace=True)
+    # Fill NA for current position
+    train_data['Должность'][train_data['Должность'].notnull()] = \
+        train_data['Должность'].notnull().apply(lambda t: 0.5)
+    train_data['Должность'].fillna(0, inplace=True)
+
+    return train_data.dropna()
+
+
+def features2vector(train_data):
+    """Special function for conversion categorical to binary array"""
+    # ------------------------------ CATEGORICAL ------------------------------
+    # Work with categorical features such as Name
+    tqdm.pandas(desc="Work with names: ")
+    train_data['Имя'] = train_data['Имя'].progress_apply(lambda t: t.lower())
+    dummies = pd.get_dummies(train_data, columns=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение'])
+    return dummies
+
 
 def load_data():
     """Function for loading data and returning data_features and data_target DataFrame"""
@@ -161,23 +193,19 @@ def load_data():
     # data_target.to_csv('../data/tmp/T13.csv', encoding='cp1251')
 
     # Loading from steady-files:
+    # update_csv()
     data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
                                 index_col=0)
     data_target = modify_target(pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
                                             index_col=0))
-
     # TODO add cleaning data!!
     # Merge 2 parts of data to one DataFrame
-    data = data_features.merge(data_target,
-                               on='ID (автономер в базе)')
-    # print('--------------Features--------', '\n', data_features)
-    # print('--------------Target--------', '\n', data_target)
-    # print(data)
-    X = data[list(data_features)]
+    data = features_fillna(data_features.merge(data_target,
+                                               on='ID (автономер в базе)'))
+    X = features2vector(data[list(data_features)])
     Y = data[list(data_target)[1:]]
 
-    # print(Y)
-    return features_fillna(X), Y
+    return X, Y
 
 
 # ----------------------------------------- Munging data -----------------------------------------
@@ -245,10 +273,10 @@ def fix_age(row):
 
 
 def plot_hist(x, mode='QTotal'):
-    plt.hist(x, 10, facecolor='g', alpha=0.75)
+    plt.hist(x, 21, facecolor='g', alpha=0.75)
     plt.xlabel(mode)
     plt.ylabel('Counts')
-    plt.title('Histogram of Quality')
+    plt.title('Histogram of ' + str(mode))
     # plt.text(60, .025, r'$\mu=100,\ \sigma=15$')
     plt.grid(True)
     if not os.path.exists('../data/plots'):
@@ -266,3 +294,10 @@ def missing_data(data):
                                                          (total - tmp) / total)['count']
     print("Количество пропусков: ")
     print(missed_data.sort_values(ascending=False))
+
+
+# Clear data function:
+def clear_txt(txt):
+    txt = txt.apply(lambda t: t.lower())
+    txt = txt.replace('[^a-z0-9]', ' ', regex=True)
+    return txt

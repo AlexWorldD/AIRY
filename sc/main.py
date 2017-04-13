@@ -10,6 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold, cross_val_score
 from timeit import default_timer as timer
+from sklearn.feature_extraction import DictVectorizer
 
 # As CONST_VAR for linking features and target
 ID = 'ID (автономер в базе)'
@@ -22,14 +23,18 @@ if __name__ == '__main__':
     # update_csv()
     # TODO DROP the ID-column
     train_data, train_target = load_data()
+    # tqdm.pandas(desc="Work with names: ")
+    # train_data['Имя'] = train_data['Имя'].progress_apply(lambda t: t.lower())
+    # enc = DictVectorizer()
+    # dummies = pd.get_dummies(train_data, columns=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение'])
+    # print(dummies.dropna())
+    missing_data(train_data)
+    missing_data(train_target)
+
 
     # Convert BD to datetime format
     # train_data['Дата рождения'] = pd.to_datetime(train_data['Дата рождения'])
     # missing_data(train_data)
-    # age_mask = (train_data['Возраст'].isnull()) & (train_data['Дата рождения'].notnull())
-    #
-    # train_data['Возраст'][age_mask] = train_data[age_mask].apply(fix_age, axis=1)
-    #
     # print(train_data[(train_data['Возраст'].notnull()) & (train_data['Дата рождения'].isnull())])
     # missing_data(train_target)
     # tt = load_features(forceAll=True)
@@ -45,6 +50,7 @@ if __name__ == '__main__':
 
     # train_data = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
     #                            index_col=0)
-    missing_data(train_data)
+
+
 
     print('Elapsed time:', timer() - start)
