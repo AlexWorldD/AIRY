@@ -23,22 +23,14 @@ if __name__ == '__main__':
     # update_csv()
     # TODO DROP the ID-column
     train_data, train_target = load_data()
+    print(train_data)
     # tqdm.pandas(desc="Work with names: ")
     # train_data['Имя'] = train_data['Имя'].progress_apply(lambda t: t.lower())
     # enc = DictVectorizer()
     # dummies = pd.get_dummies(train_data, columns=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение'])
     # print(dummies.dropna())
-    missing_data(train_data)
-    missing_data(train_target)
-
 
     # Convert BD to datetime format
-    # train_data['Дата рождения'] = pd.to_datetime(train_data['Дата рождения'])
-    # missing_data(train_data)
-    # print(train_data[(train_data['Возраст'].notnull()) & (train_data['Дата рождения'].isnull())])
-    # missing_data(train_target)
-    # tt = load_features(forceAll=True)
-    # missing_data(tt)
     # 'Явка на смене (Смена)', 'Востребована оплата по смене', 'Выработка % от нормы по сканированию (Qscan)',
     # 'Выработка % от нормы по ручному пересчету (QSP)', 'QTotalCalcType', 'QTotal', 'Ошибок сканирования (штук)',
     # 'Статус смены (Смена)'

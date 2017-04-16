@@ -7,6 +7,7 @@ from tqdm import tqdm, tqdm_pandas, trange
 import matplotlib.pyplot as plt
 import os
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.preprocessing import OneHotEncoder
 
 # Disable SettingWithCopyWarning
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -176,10 +177,19 @@ def features_fillna(train_data):
 def features2vector(train_data):
     """Special function for conversion categorical to binary array"""
     # ------------------------------ CATEGORICAL ------------------------------
+    # Splitting BD to day and month + getting zodiac sign
+    tqdm.pandas(desc="Splitting BD to day   ")
+    train_data['DayOfBirth'] = train_data['Дата рождения'].progress_apply(lambda t: t.day)
+    tqdm.pandas(desc="Splitting BD to month ")
+    train_data['MonthOfBirth'] = train_data['Дата рождения'].progress_apply(lambda t: t.month)
+    tqdm.pandas(desc="Getting zodiac sign ")
+    train_data['Zodiac'] = train_data['Дата рождения'].progress_apply(zodiac)
     # Work with categorical features such as Name
     tqdm.pandas(desc="Work with names: ")
     train_data['Имя'] = train_data['Имя'].progress_apply(lambda t: t.lower())
-    dummies = pd.get_dummies(train_data, columns=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение'])
+    # TODO change to OneHotEncoder for test data transformation. - is it necessary??
+    dummies = pd.get_dummies(train_data, columns=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение',
+                                                  'Есть основная работа', 'Zodiac'])
     return dummies
 
 
@@ -272,6 +282,25 @@ def fix_age(row):
     return 2014 - row['Дата рождения'].year
 
 
+def calendar_info(value):
+    """Special function for conversion Date of Birth to Day and Month of Birth"""
+    tmp = list()
+    tmp.append(value.day)
+    tmp.append(value.month)
+    return tmp
+
+def zodiac(value):
+
+    zodiacs = [(120, 'Cap'), (218, 'Aqu'), (320, 'Pis'), (420, 'Ari'), (521, 'Tau'),
+               (621, 'Gem'), (722, 'Can'), (823, 'Leo'), (923, 'Vir'), (1023, 'Lib'),
+               (1122, 'Sco'), (1222, 'Sag'), (1231, 'Cap')]
+
+    date_number = value.month*100+value.day
+    for z in zodiacs:
+        if date_number <= z[0]:
+            return z[1]
+
+
 def plot_hist(x, mode='QTotal'):
     plt.hist(x, 21, facecolor='g', alpha=0.75)
     plt.xlabel(mode)
@@ -284,6 +313,8 @@ def plot_hist(x, mode='QTotal'):
     plt.savefig('../data/plots/Column' + str(mode) + '.png')
     plt.show()
 
+def plot_bar(x, title=''):
+    plt.bar(x)
 
 def missing_data(data):
     """Analysis data and find missing values"""
