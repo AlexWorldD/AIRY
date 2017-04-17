@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import os
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.preprocessing import OneHotEncoder
+from sklearn import preprocessing
 
 # Disable SettingWithCopyWarning
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -152,7 +153,7 @@ def features_fillna(train_data):
     train_data['Дата рождения'] = pd.to_datetime(train_data['Дата рождения'], errors='coerce')
 
     # --------------------------------- FillNA ---------------------------------
-    # TODO add conversion fro age column to integer - is it necessary??
+    # TODO add conversion from age column to integer - is it necessary??
     age_mask = (train_data['Возраст'].isnull()) & (train_data['Дата рождения'].notnull())
     train_data['Возраст'][age_mask] = train_data[age_mask].apply(fix_age, axis=1)
 
@@ -182,15 +183,31 @@ def features2vector(train_data):
     train_data['DayOfBirth'] = train_data['Дата рождения'].progress_apply(lambda t: t.day)
     tqdm.pandas(desc="Splitting BD to month ")
     train_data['MonthOfBirth'] = train_data['Дата рождения'].progress_apply(lambda t: t.month)
-    tqdm.pandas(desc="Getting zodiac sign ")
+    tqdm.pandas(desc="Getting zodiac sign   ")
     train_data['Zodiac'] = train_data['Дата рождения'].progress_apply(zodiac)
     # Work with categorical features such as Name
-    tqdm.pandas(desc="Work with names: ")
+    tqdm.pandas(desc="Work with names:      ")
     train_data['Имя'] = train_data['Имя'].progress_apply(lambda t: t.lower())
     # TODO change to OneHotEncoder for test data transformation. - is it necessary??
     dummies = pd.get_dummies(train_data, columns=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение',
                                                   'Есть основная работа', 'Zodiac'])
     return dummies
+
+def data_preprocessing(data):
+    """Drop unnecessary columns and Scaling, Standardization and Normalization"""
+    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    data.drop(drop_titles, axis=1, inplace=True)
+    print(data['DayOfBirth'])
+    titles = list(data)
+    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+    rescaledData = pd.DataFrame(scaler.fit_transform(data.values),
+                                 index=data.index,
+                                 columns=data.columns)
+    # print(rescaledData)
+    # scaler2 = preprocessing.StandardScaler().fit(rescaledData)
+    # standardizeData = scaler2.transform(rescaledData)
+    # print(standardizeData)
+    print(rescaledData)
 
 
 def load_data():
