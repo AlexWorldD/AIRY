@@ -229,6 +229,7 @@ def load_data():
     # Merge 2 parts of data to one DataFrame
     data = features_fillna(data_features.merge(data_target,
                                                on='ID (автономер в базе)'))
+    print(data.shape)
     X = features2vector(data[list(data_features)])
     Y = data[list(data_target)[1:]]
 
