@@ -23,6 +23,7 @@ if __name__ == '__main__':
     # update_csv()
     # TODO DROP the ID-column
     # train_data, train_target = load_data_bin()
+
     # train_data = vectorize(train_data)
     # drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
     # train_data.drop(drop_titles, axis=1, inplace=True)
@@ -35,7 +36,7 @@ if __name__ == '__main__':
     #                             index=rescaledData.index,
     #                             columns=rescaledData.columns)
     # print(rescaledData)
-    test_linear()
+    test_neural()
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,

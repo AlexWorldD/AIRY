@@ -6,9 +6,11 @@ import pandas as pd
 from tqdm import tqdm, tqdm_pandas, trange
 import matplotlib.pyplot as plt
 from timeit import default_timer as timer
+from datetime import datetime
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import KFold, cross_val_score
 from sklearn import linear_model
+from sklearn.neural_network import MLPClassifier
 import os
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.preprocessing import OneHotEncoder
@@ -154,29 +156,32 @@ def zodiac(value):
 
 
 # ----------------------------------------- Additional features -------------------------------------
-def add_features(data):
+def add_features(data, split_bd=True, zodiac_sign=True):
     """Special function for add features as day and month of birth and zodiac sign"""
     # Splitting BD to day and month + getting zodiac sign
-    tqdm.pandas(desc="Splitting BD to day   ")
-    data['DayOfBirth'] = data['Дата рождения'].progress_apply(lambda t: t.day)
-    tqdm.pandas(desc="Splitting BD to month ")
-    data['MonthOfBirth'] = data['Дата рождения'].progress_apply(lambda t: t.month)
-    tqdm.pandas(desc="Getting zodiac sign   ")
-    data['Zodiac'] = data['Дата рождения'].progress_apply(zodiac)
-    tqdm.pandas(desc="Binarize work info    ")
-    data['Есть основная работа'] = data['Есть основная работа'].progress_apply(lambda x: 1 if x == 'Да' else 0)
+    if split_bd:
+        tqdm.pandas(desc="Splitting BD to day   ")
+        data['DayOfBirth'] = data['Дата рождения'].progress_apply(lambda t: t.day)
+        tqdm.pandas(desc="Splitting BD to month ")
+        data['MonthOfBirth'] = data['Дата рождения'].progress_apply(lambda t: t.month)
+    if zodiac_sign:
+        tqdm.pandas(desc="Getting zodiac sign   ")
+        data['Zodiac'] = data['Дата рождения'].progress_apply(zodiac)
+    # tqdm.pandas(desc="Binarize work info    ")
+    # data['Есть основная работа'] = data['Есть основная работа'].progress_apply(lambda x: 1 if x == 'Да' else 0)
     return data
 
 
 # ----------------------------------------- Vectorize features -------------------------------------
-def vectorize(data):
+def vectorize(data, low=False, titles=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение']):
     # Work with categorical features such as Name
-    tqdm.pandas(desc="Work with names       ")
-    data['Имя'] = data['Имя'].progress_apply(lambda t: t.lower())
-    tqdm.pandas(desc="Work with patronymic  ")
-    data['Отчество'] = data['Отчество'].progress_apply(lambda t: t.lower())
+    if low:
+        tqdm.pandas(desc="Work with names       ")
+        data['Имя'] = data['Имя'].progress_apply(lambda t: t.lower())
+        tqdm.pandas(desc="Work with patronymic  ")
+        data['Отчество'] = data['Отчество'].progress_apply(lambda t: t.lower())
     # TODO change to OneHotEncoder for test data transformation. - is it necessary??
-    dummies = pd.get_dummies(data, columns=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение', 'Zodiac'], sparse=False)
+    dummies = pd.get_dummies(data, columns=titles, sparse=False)
     return dummies
 
 
@@ -291,7 +296,7 @@ def quality_ratio2(row, qscan_min=0.5, qscan_max=0.85, mode='QTotal'):
 
 # ----------------------------------------- Load data from files and return X, binary Y --------------------------------
 def load_data_bin():
-    """Loading data and returning data_features and data_target DataFrames"""
+    """Loading data and returning data_features and data_target DataFrames. Return required columns as is"""
     # Loading from steady-files:
     # update_csv()
     data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
@@ -307,7 +312,7 @@ def load_data_bin():
     data = features_fillna(data)
     print("FillNA: ", data.shape)
 
-    X = add_features(data[list(data_features)])
+    X = data[list(data_features)]
     Y = data[list(data_target)[1:]]
     return X, Y
 
@@ -328,15 +333,18 @@ def missing_data(data):
 def test_linear():
     """Testing linear method for train"""
     train_data, train_target = load_data_bin()
-    train_data = vectorize(train_data)
-    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    # train_data = add_features(train_data)
+    drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
     train_data.drop(drop_titles, axis=1, inplace=True)
+    categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
+    work_titles = list(train_data)
+    train_data = vectorize(train_data, titles=categorical_titles)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
                random_state=241)
 
-    scaler = preprocessing.MinMaxScaler(feature_range=(0, 2))
+    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
     rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
                                 index=train_data.index,
                                 columns=train_data.columns)
@@ -370,12 +378,73 @@ def test_linear():
     print("Time elapsed: ", time_best)
     # Draw and save plot
     plt.rcParams.update({'font.size': 22})
-    plt.figure("LogisticRegression: ", figsize=(16, 12)).suptitle('LogisticRegression')
+    plt.figure("LogisticRegression: ", figsize=(16, 12)).suptitle('LogisticRegression with Zodiac')
     plt.ylabel('Score')
     plt.xlabel('log(C)')
     plt.plot(np.arange(-5, 6), quality, 'g', linewidth=2)
     plt.grid(True)
-    if not os.path.exists('../data/plots'):
-        os.makedirs('../data/plots')
-    plt.savefig('../data/plots/LogisticRegressionScale' + str(score_best) + '.png')
+    if not os.path.exists('../data/plots/Models/'):
+        os.makedirs('../data/plots/Models/')
+    plt.savefig('../data/plots/Models/LogisticRegressionScale_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
 
+
+# ----------------------------------------- Test Neural Network  -------------------------------------
+def test_neural():
+    """Testing linear method for train"""
+    train_data, train_target = load_data_bin()
+    train_data = add_features(train_data)
+    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    train_data.drop(drop_titles, axis=1, inplace=True)
+    categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
+    work_titles = list(train_data)
+    train_data = vectorize(train_data, titles=categorical_titles, low=True)
+    # KFold for splitting
+    cv = KFold(n_splits=5,
+               shuffle=True,
+               random_state=241)
+
+    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+    rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                index=train_data.index,
+                                columns=train_data.columns)
+    quality = []
+    time = []
+    _range = np.arange(-5, 3)
+    C = np.power(10.0, _range)
+    for c in C:
+        start = timer()
+        lr = MLPClassifier(alpha=c, hidden_layer_sizes=(10, 10),
+                           random_state=241)
+        scores = cross_val_score(lr, rescaledData, train_target['QualityRatioTotal'],
+                                 cv=cv, scoring='roc_auc',
+                                 n_jobs=-1)
+        score = np.mean(scores)
+        quality.append(score)
+        tt = timer() - start
+        time.append(tt)
+        print("C parameter is " + str(c))
+        print("Score is ", score)
+        print("Time elapsed: ", tt)
+        print("""-----------¯\_(ツ)_/¯ -----------""")
+
+    # Draw it:
+    score_best = max(quality)
+    idx = quality.index(score_best)
+    C_best = C[idx]
+    time_best = time[idx]
+    print("Наилучший результат достигается при C=" + str(C_best))
+    print("Score is ", score_best)
+    print("Time elapsed: ", time_best)
+    # Draw and save plot
+    plt.rcParams.update({'font.size': 22})
+    fig = plt.figure("Neural network: ", figsize=(16, 12))
+    fig.suptitle('MLPClassifier', fontweight='bold')
+    ax = fig.add_subplot(111)
+    ax.set_title(str(work_titles), fontdict={'fontsize': 10})
+    ax.set_ylabel('Score')
+    ax.set_xlabel('log(C)')
+    ax.plot(_range, quality, 'g', linewidth=2)
+    ax.grid(True)
+    if not os.path.exists('../data/plots/Models/'):
+        os.makedirs('../data/plots/Models/')
+    plt.savefig('../data/plots/Models/MLPClassifier_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
