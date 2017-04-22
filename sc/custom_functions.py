@@ -97,10 +97,11 @@ def load_targets(path='../data/Target2013.xlsx',
 
 
 # ----------------------------------------- Update temporary CSV files for boostUp -------------------------------------
-def update_csv():
+def update_csv(use=''):
     """Temporary function for updating temporary CSV files"""
     priorities = ['Важный',
                   'Средняя']
+    priorities.extend(use)
     data_features = load_features(priorities=priorities)
     data_features.to_csv('../data/tmp/F13.csv', encoding='cp1251')
     data_target = load_targets()
@@ -304,7 +305,7 @@ def quality_ratio2(row, qscan_min=0.5, qscan_max=0.85, mode='QTotal'):
 def load_data_bin():
     """Loading data and returning data_features and data_target DataFrames. Return required columns as is"""
     # Loading from steady-files:
-    # update_csv()
+    # update_csv(use='A')
     data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
                                 index_col=0)
     print("Features: ", data_features.shape)
@@ -324,15 +325,33 @@ def load_data_bin():
 
 
 # ----------------------------------------- Print statistic of DataFrame -------------------------------------
-def missing_data(data):
+def missing_data(data, plot=False, title='Features'):
     """Analysis data and find missing values"""
-    counts = data.describe(include='all').loc[:'count'].T
+    counts = data.describe(include='all').loc[:'count'].T.sort_values(by='count', ascending=False)
+    if plot:
+        plt.show(counts.head(15).plot.bar())
     print(counts)
     total = len(data)
     missed_data = counts[counts['count'] <= total].apply(lambda tmp:
                                                          (total - tmp) / total)['count']
     print("Количество пропусков: ")
-    print(missed_data.sort_values(ascending=False))
+    miss_sort = missed_data.sort_values(ascending=True)
+    print(miss_sort)
+
+    return miss_sort
+    # Draw and save plot
+    # plt.rcParams.update({'font.size': 22})
+    # fig = plt.figure("Data analysis: ", figsize=(16, 12))
+    # fig.suptitle('Data analysis', fontweight='bold')
+    # ax = fig.add_subplot(111)
+    # ax.set_title(title, fontdict={'fontsize': 10})
+    # ax.set_ylabel('Score')
+    # ax.set_xlabel('log(C)')
+    # ax.plot(_range, quality, 'g', linewidth=2)
+    # ax.grid(True)
+    # if not os.path.exists('../data/plots/DataAnalysis/'):
+    #     os.makedirs('../data/plots/DataAnalysis/')
+    # plt.savefig('../data/plots/DataAnalysis/' +title+datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
 
 
 # -----------------------------------------  Logistic Regression   -------------------------------------
@@ -371,7 +390,7 @@ def LR():
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
-def test_logistic():
+def test_logistic(title=''):
     """Testing linear method for train"""
     train_data, train_target = load_data_bin()
     train_data = add_features(train_data)
@@ -423,7 +442,7 @@ def test_logistic():
     # Draw and save plot
     plt.rcParams.update({'font.size': 22})
     fig = plt.figure("Logistic regression: ", figsize=(16, 12))
-    fig.suptitle('Logistic regression', fontweight='bold')
+    fig.suptitle('Logistic regression  ' + str(score_best), fontweight='bold')
     ax = fig.add_subplot(111)
     ax.set_title(str(work_titles), fontdict={'fontsize': 10})
     ax.set_ylabel('Score')
@@ -432,7 +451,7 @@ def test_logistic():
     ax.grid(True)
     if not os.path.exists('../data/plots/Models/LogisticRegression/'):
         os.makedirs('../data/plots/Models/LogisticRegression/')
-    plt.savefig('../data/plots/Models/LogisticRegression/'+datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
+    plt.savefig('../data/plots/Models/LogisticRegression/' + title + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
 
 
 # ----------------------------------------- Test Neural Network  -------------------------------------
@@ -442,9 +461,10 @@ def test_neural():
     train_data = add_features(train_data)
     drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
     train_data.drop(drop_titles, axis=1, inplace=True)
+    train_data = modify_names(train_data)
     categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
     work_titles = list(train_data)
-    train_data = vectorize(train_data, titles=categorical_titles, low=True)
+    train_data = vectorize(train_data, titles=categorical_titles)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
@@ -497,8 +517,43 @@ def test_neural():
     plt.savefig('../data/plots/Models/Neural/MLPClassifier_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
 
 
+# ----------------------------------------- Neural Network Model -------------------------------------
+def neural(c=0.1):
+    """Build neural network model"""
+    train_data, train_target = load_data_bin()
+    train_data = add_features(train_data)
+    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    train_data.drop(drop_titles, axis=1, inplace=True)
+    train_data = modify_names(train_data)
+    categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
+    work_titles = list(train_data)
+    train_data = vectorize(train_data, titles=categorical_titles)
+    # KFold for splitting
+    cv = KFold(n_splits=5,
+               shuffle=True,
+               random_state=241)
+
+    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+    rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                index=train_data.index,
+                                columns=train_data.columns)
+    start = timer()
+
+    lr = MLPClassifier(alpha=c, hidden_layer_sizes=(100,),
+                       random_state=241)
+    scores = cross_val_score(lr, rescaledData, train_target['QualityRatioTotal'],
+                             cv=cv, scoring='roc_auc',
+                             n_jobs=-1)
+    score = np.mean(scores)
+    tt = timer() - start
+    print("C parameter is " + str(c))
+    print("Score is ", score)
+    print("Time elapsed: ", tt)
+    print("""-----------¯\_(ツ)_/¯ -----------""")
+
+
 def patronymic(t):
-    t=t.lower()
+    t = t.lower()
     if t[-4:] in ['ович', 'евич', 'овна', 'евна']:
         return t[:-4]
     elif t[-1:] in ['-', '0', '6', '7']:

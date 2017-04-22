@@ -20,10 +20,10 @@ if __name__ == '__main__':
     # Setting required priorities for features
     priorities = ['Важный',
                   'Средняя']
-    # update_csv()
+    # update_csv(use='A')
     # TODO DROP the ID-column
     # train_data, train_target = load_data_bin()
-
+    # print(train_data)
     # train_data = vectorize(train_data)
     # drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
     # train_data.drop(drop_titles, axis=1, inplace=True)
@@ -41,7 +41,8 @@ if __name__ == '__main__':
     cv = KFold(n_splits=5,
                shuffle=True,
                random_state=241)
-    test_logistic()
-
+    # neural()
+    data = load_features(forceAll=True)
+    tmp = missing_data(data)
 
     print('Elapsed time:', timer() - start)
