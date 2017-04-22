@@ -120,6 +120,7 @@ def features_fillna(data):
     data['Возраст'][age_mask] = data[age_mask].apply(fix_age, axis=1)
     # FillNA for Patronymic
     # TODO add cleaning from rubbish such as '---' and '0---'
+
     data['Отчество'].fillna('Не указано', inplace=True)
     # FillNA for family
     data['Семейное положение'].fillna('Не указано', inplace=True)
@@ -173,16 +174,21 @@ def add_features(data, split_bd=True, zodiac_sign=True):
 
 
 # ----------------------------------------- Vectorize features -------------------------------------
-def vectorize(data, low=False, titles=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение']):
+def vectorize(data, titles=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение']):
     # Work with categorical features such as Name
-    if low:
-        tqdm.pandas(desc="Work with names       ")
-        data['Имя'] = data['Имя'].progress_apply(lambda t: t.lower())
-        tqdm.pandas(desc="Work with patronymic  ")
-        data['Отчество'] = data['Отчество'].progress_apply(lambda t: t.lower())
     # TODO change to OneHotEncoder for test data transformation. - is it necessary??
     dummies = pd.get_dummies(data, columns=titles, sparse=False)
     return dummies
+
+
+# ----------------------------------------- Get father's names + lowercase() -------------------------------------
+def modify_names(data):
+    """Special function for cutting father's names"""
+    tqdm.pandas(desc="Work with names       ")
+    data['Имя'] = data['Имя'].progress_apply(lambda t: t.lower())
+    tqdm.pandas(desc="Work with patronymic  ")
+    data['Отчество'] = data['Отчество'].progress_apply(patronymic)
+    return data
 
 
 # ----------------------------------------- Modify target data -------------------------------------
@@ -329,13 +335,50 @@ def missing_data(data):
     print(missed_data.sort_values(ascending=False))
 
 
-# ----------------------------------------- Test Logistic Regression  -------------------------------------
-def test_linear():
+# -----------------------------------------  Logistic Regression   -------------------------------------
+def LR():
     """Testing linear method for train"""
     train_data, train_target = load_data_bin()
-    # train_data = add_features(train_data)
-    drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
+    train_data = add_features(train_data)
+    # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
+    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
     train_data.drop(drop_titles, axis=1, inplace=True)
+    categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
+    work_titles = list(train_data)
+    train_data = vectorize(train_data, titles=categorical_titles)
+    # KFold for splitting
+    cv = KFold(n_splits=5,
+               shuffle=True,
+               random_state=241)
+
+    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+    rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                index=train_data.index,
+                                columns=train_data.columns)
+    start = timer()
+    lr = linear_model.LogisticRegression(C=10,
+                                         random_state=241,
+                                         n_jobs=-1)
+    scores = cross_val_score(lr, rescaledData, train_target['QualityRatioTotal'],
+                             cv=cv, scoring='roc_auc',
+                             n_jobs=-1)
+    score = np.mean(scores)
+    tt = timer() - start
+    print("C parameter is " + str(10))
+    print("Score is ", score)
+    print("Time elapsed: ", tt)
+    print("""-----------¯\_(ツ)_/¯ -----------""")
+
+
+# ----------------------------------------- Test Logistic Regression  -------------------------------------
+def test_logistic():
+    """Testing linear method for train"""
+    train_data, train_target = load_data_bin()
+    train_data = add_features(train_data)
+    # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
+    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    train_data.drop(drop_titles, axis=1, inplace=True)
+    train_data = modify_names(train_data)
     categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
     work_titles = list(train_data)
     train_data = vectorize(train_data, titles=categorical_titles)
@@ -350,7 +393,8 @@ def test_linear():
                                 columns=train_data.columns)
     quality = []
     time = []
-    C = np.power(10.0, np.arange(-5, 6))
+    _range = np.arange(-4, 2)
+    C = np.power(10.0, _range)
     for c in C:
         start = timer()
         lr = linear_model.LogisticRegression(C=c,
@@ -368,7 +412,7 @@ def test_linear():
         print("Time elapsed: ", tt)
         print("""-----------¯\_(ツ)_/¯ -----------""")
 
-    # Draw it:
+        # Draw it:
     score_best = max(quality)
     idx = quality.index(score_best)
     C_best = C[idx]
@@ -378,14 +422,17 @@ def test_linear():
     print("Time elapsed: ", time_best)
     # Draw and save plot
     plt.rcParams.update({'font.size': 22})
-    plt.figure("LogisticRegression: ", figsize=(16, 12)).suptitle('LogisticRegression with Zodiac')
-    plt.ylabel('Score')
-    plt.xlabel('log(C)')
-    plt.plot(np.arange(-5, 6), quality, 'g', linewidth=2)
-    plt.grid(True)
-    if not os.path.exists('../data/plots/Models/'):
-        os.makedirs('../data/plots/Models/')
-    plt.savefig('../data/plots/Models/LogisticRegressionScale_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
+    fig = plt.figure("Logistic regression: ", figsize=(16, 12))
+    fig.suptitle('Logistic regression', fontweight='bold')
+    ax = fig.add_subplot(111)
+    ax.set_title(str(work_titles), fontdict={'fontsize': 10})
+    ax.set_ylabel('Score')
+    ax.set_xlabel('log(C)')
+    ax.plot(_range, quality, 'g', linewidth=2)
+    ax.grid(True)
+    if not os.path.exists('../data/plots/Models/LogisticRegression/'):
+        os.makedirs('../data/plots/Models/LogisticRegression/')
+    plt.savefig('../data/plots/Models/LogisticRegression/'+datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
 
 
 # ----------------------------------------- Test Neural Network  -------------------------------------
@@ -445,6 +492,16 @@ def test_neural():
     ax.set_xlabel('log(C)')
     ax.plot(_range, quality, 'g', linewidth=2)
     ax.grid(True)
-    if not os.path.exists('../data/plots/Models/'):
-        os.makedirs('../data/plots/Models/')
-    plt.savefig('../data/plots/Models/MLPClassifier_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
+    if not os.path.exists('../data/plots/Models/Neural/'):
+        os.makedirs('../data/plots/Models/Neural/')
+    plt.savefig('../data/plots/Models/Neural/MLPClassifier_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
+
+
+def patronymic(t):
+    t=t.lower()
+    if t[-4:] in ['ович', 'евич', 'овна', 'евна']:
+        return t[:-4]
+    elif t[-1:] in ['-', '0', '6', '7']:
+        return 'Не указано'
+    else:
+        return t

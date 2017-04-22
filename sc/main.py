@@ -36,10 +36,12 @@ if __name__ == '__main__':
     #                             index=rescaledData.index,
     #                             columns=rescaledData.columns)
     # print(rescaledData)
-    test_neural()
+    # LR()
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
                random_state=241)
+    test_logistic()
+
 
     print('Elapsed time:', timer() - start)
