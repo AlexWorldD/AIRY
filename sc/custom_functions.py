@@ -136,7 +136,7 @@ def features_fillna(data):
     data['Должность'].fillna(0, inplace=True)
 
     data['Есть имейл (указан сервис)'].fillna('Не указано', inplace=True)
-
+    data['Первые 4 цифры моб телефона'].fillna(0, inplace=True)
     return data.dropna()
 
 
@@ -423,8 +423,11 @@ def test_logistic(title=''):
     # ---- Email ----
     tqdm.pandas(desc="Work with email  ")
     train_data['Есть имейл (указан сервис)'] = train_data['Есть имейл (указан сервис)'].progress_apply(email)
+    # ---- Add MOBILE ----
+    train_data = get_mobile(train_data)
     # ---- Categorical ----
     categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
+    # print(categorical_titles)
     work_titles = list(train_data)
     train_data = vectorize(train_data, titles=categorical_titles)
     # KFold for splitting
@@ -605,6 +608,50 @@ def email(t):
         return t
     else:
         return 'Other'
+
+
+# ----------------------------------------- Get mobile carrier -------------------------------------
+def mobile(t, mode='Operator'):
+    """Special function for getting information about mobile operator"""
+    if int(t) // 1000 in [7, 8]:
+        code = int(t) % 10
+    else:
+        code = int(t) // 10
+    if mode == 'Operator':
+        MTC = [902, 904, 908, 910, 911, 912, 913, 914, 915, 916, 917, 918, 919, 950, 978, 980, 981, 982, 983, 984, 985,
+               986,
+               987, 988, 989]
+        BEELINE = [900, 902, 903, 904, 905, 906, 908, 909, 950, 951, 953, 960, 961, 962, 963, 964, 965, 966, 967, 968,
+                   969]
+        MEGAFON = [920, 921, 922, 923, 924, 925, 926, 927, 928, 929, 930, 931, 932, 933, 934, 936, 937, 938, 939, 999]
+        RT = [904, 908, 950, 951, 955, 958, 970, 971, 992]
+        T2 = [900, 901, 902, 904, 908, 950, 951, 952, 953, 958, 977, 991, 992, 993, 994, 995, 996, 999]
+        if code in MTC:
+            return 'MTC'
+        elif code in BEELINE:
+            return 'Beeline'
+        elif code in MEGAFON:
+            return 'Megafon'
+        elif code in RT:
+            return 'RT'
+        elif code in T2:
+            return 'Tele2'
+        else:
+            if code == 0:
+                return 'Не указано'
+            else:
+                return 'Unknown'
+    else:
+        return str(code)
+
+
+# ----------------------------------------- Getting mobile operator() -------------------------------------
+def get_mobile(data, mode='Operator'):
+    """Special function for cutting father's names"""
+    tqdm.pandas(desc="Work with MOBILE       ")
+    data['Mobile'] = data['Первые 4 цифры моб телефона'].progress_apply(mobile, mode=mode)
+    data.drop('Первые 4 цифры моб телефона', axis=1, inplace=True)
+    return data
 
 
 # ----------------------------------------- Print bar of required column -------------------------------------

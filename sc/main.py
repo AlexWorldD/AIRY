@@ -20,13 +20,18 @@ if __name__ == '__main__':
     # Setting required priorities for features
     priorities = ['Важный',
                   'Средняя']
-    # update_csv(use=['A', 'B'])
+    # update_csv(use=['A', 'B', 'C'])
     # TODO DROP the ID-column
     # train_data, train_target = load_data_bin()
-    # tmp = 'Имя'
+    # train_data = get_mobile(train_data, mode='Numbers')
+    # print(train_data['Mobile'])
+    # mobiles = train_data.groupby(by='Mobile').size()
+    # mobiles.sort_values(ascending=False, inplace=True)
+    # print(mobiles)
+
     # tqdm.pandas(desc="Work with NAME.v2  ")
     # # train_data[tmp] = train_data[tmp].progress_apply(email)
-    # train_data['Имя'] = train_data['Имя'].progress_apply(lambda t: t.lower())
+    # train_data'Имя'] = train_data['Имя'].progress_apply(lambda t: t.lower())
     # mails = train_data.groupby(by=tmp).size()
     # mails.sort_values(ascending=False, inplace=True)
     # print(list(pd.DataFrame(mails[mails>10]).T))
@@ -51,7 +56,7 @@ if __name__ == '__main__':
                shuffle=True,
                random_state=241)
     # neural()
-    test_logistic(title='WithPopularNames')
+    test_logistic(title='MobileOperator')
     # data = load_features(forceAll=True)
     # counts = data.describe(include='all').loc[:'count'].T.sort_values(by='count', ascending=False)
     # plt.show(counts.head(25).plot.bar())
