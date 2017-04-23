@@ -20,10 +20,16 @@ if __name__ == '__main__':
     # Setting required priorities for features
     priorities = ['Важный',
                   'Средняя']
-    # update_csv(use='A')
+    # update_csv(use=['A', 'B'])
     # TODO DROP the ID-column
-    # train_data, train_target = load_data_bin()
-    # print(train_data)
+    train_data, train_target = load_data_bin()
+    tmp = 'Есть имейл (указан сервис)'
+    # mails = train_data.groupby(by=tmp).size()
+    # mails.drop('Не указано', inplace=True)
+    # mails.sort_values(ascending=False, inplace=True)
+    # plt.show(mails.plot.bar())
+    print_bar(train_data, tmp='Имя')
+
     # train_data = vectorize(train_data)
     # drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
     # train_data.drop(drop_titles, axis=1, inplace=True)
@@ -37,12 +43,16 @@ if __name__ == '__main__':
     #                             columns=rescaledData.columns)
     # print(rescaledData)
     # LR()
+
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
                random_state=241)
     # neural()
-    data = load_features(forceAll=True)
-    tmp = missing_data(data)
+
+    # data = load_features(forceAll=True)
+    # counts = data.describe(include='all').loc[:'count'].T.sort_values(by='count', ascending=False)
+    # plt.show(counts.head(25).plot.bar())
+    # print(counts.head(25))
 
     print('Elapsed time:', timer() - start)

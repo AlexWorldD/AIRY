@@ -135,6 +135,8 @@ def features_fillna(data):
         data['Должность'].notnull().apply(lambda t: 0.5)
     data['Должность'].fillna(0, inplace=True)
 
+    data['Есть имейл (указан сервис)'].fillna('Не указано', inplace=True)
+
     return data.dropna()
 
 
@@ -552,7 +554,9 @@ def neural(c=0.1):
     print("""-----------¯\_(ツ)_/¯ -----------""")
 
 
+# ----------------------------------------- Clean patronymic column -------------------------------------
 def patronymic(t):
+    """Special function for cleaning patronymic"""
     t = t.lower()
     if t[-4:] in ['ович', 'евич', 'овна', 'евна']:
         return t[:-4]
@@ -560,3 +564,12 @@ def patronymic(t):
         return 'Не указано'
     else:
         return t
+
+
+# ----------------------------------------- Print bar of required column -------------------------------------
+def print_bar(data, tmp='Имя', filna=False):
+    mails = data.groupby(by=tmp).size()
+    if filna:
+        mails.drop('Не указано', inplace=True)
+    mails.sort_values(ascending=False, inplace=True)
+    plt.show(mails.head(10).plot.bar())
