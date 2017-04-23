@@ -185,13 +185,32 @@ def vectorize(data, titles=['Имя', 'Отчество', 'Пол', 'Дети', 
 
 
 # ----------------------------------------- Get father's names + lowercase() -------------------------------------
-def modify_names(data):
+def modify_names(data, popular=False):
     """Special function for cutting father's names"""
     tqdm.pandas(desc="Work with names       ")
     data['Имя'] = data['Имя'].progress_apply(lambda t: t.lower())
+    if popular:
+        tqdm.pandas(desc="Work with NAME.v2       ")
+        data['Имя'] = data['Имя'].progress_apply(popular_names)
     tqdm.pandas(desc="Work with patronymic  ")
     data['Отчество'] = data['Отчество'].progress_apply(patronymic)
     return data
+
+
+def popular_names(t):
+    popular = ['светлана', 'екатерина', 'александр', 'елена', 'татьяна', 'ирина', 'сергей', 'ольга', 'наталья',
+               'алексей', 'анна', 'юлия', 'мария', 'олег', 'оксана', 'марина', 'дмитрий', 'анастасия', 'надежда',
+               'александра', 'евгений', 'андрей', 'владимир', 'максим', 'наталия', 'станислав', 'жанна', 'роман',
+               'денис', 'людмила', 'виталий', 'иван', 'галина', 'владислав', 'игорь', 'евгения', 'виктория', 'михаил',
+               'валентина', 'алена', 'любовь', 'дарья', 'никита', 'антон', 'виолета', 'николай', 'олеся', 'юрий',
+               'ксения', 'василий', 'геннадий', 'павел', 'нина', 'эльвира', 'алина', 'лариса', 'артем', 'константин',
+               'кристина', 'валерий', 'махамаджан', 'вячеслав', 'виктор', 'илья', 'анатолий', 'кирилл', 'маргарита',
+               'вера', 'руслан', 'лилия', 'лидия', 'яна', 'алла', 'ростислав', 'айгуль', 'инна', 'эдуард', 'солохидин',
+               'алёна']
+    if t not in popular:
+        return 'Редкое имя'
+    else:
+        return t
 
 
 # ----------------------------------------- Modify target data -------------------------------------
@@ -399,7 +418,12 @@ def test_logistic(title=''):
     # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
     drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
     train_data.drop(drop_titles, axis=1, inplace=True)
+    # ---- NAMES ----
     train_data = modify_names(train_data)
+    # ---- Email ----
+    tqdm.pandas(desc="Work with email  ")
+    train_data['Есть имейл (указан сервис)'] = train_data['Есть имейл (указан сервис)'].progress_apply(email)
+    # ---- Categorical ----
     categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
     work_titles = list(train_data)
     train_data = vectorize(train_data, titles=categorical_titles)
@@ -566,10 +590,30 @@ def patronymic(t):
         return t
 
 
+# ----------------------------------------- Clean e-mail column -------------------------------------
+def email(t):
+    """Special function for cleaning patronymic"""
+    if not t.find('gmail') == -1 or not t.find('jmail'):
+        return 'gmail'
+    elif not t.find('mail') == -1:
+        return 'mail'
+    elif not t.find('ya') == -1 or not t.find('dex'):
+        return 'yandex'
+    elif not t.find('rambl') == -1:
+        return 'rambler'
+    elif t in ['Не указано', 'list.ru', 'maxipost.ru', 'bk.ru', 'inbox.ru', 'narod.ru']:
+        return t
+    else:
+        return 'Other'
+
+
 # ----------------------------------------- Print bar of required column -------------------------------------
-def print_bar(data, tmp='Имя', filna=False):
+def print_bar(data, tmp='Имя', filna=False, head=10):
     mails = data.groupby(by=tmp).size()
     if filna:
         mails.drop('Не указано', inplace=True)
     mails.sort_values(ascending=False, inplace=True)
-    plt.show(mails.head(10).plot.bar())
+    plt.figure("Neural network: ", figsize=(10, 6))
+    plt.subplot(mails.head(head).plot.bar())
+    plt.tight_layout()
+    plt.show()
