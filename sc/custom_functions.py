@@ -348,6 +348,53 @@ def load_data_bin():
     return X, Y
 
 
+# ----------------------------------------- Loading data v2.0 -------------------------------------
+def load_data(transform_category=False, drop=''):
+    """Loading data from steady CSV-files"""
+    # Loading from steady-files:
+    # update_csv(use='A')
+    data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
+                                index_col=0)
+    print("Features: ", data_features.shape)
+    data_target = binarize_target(pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
+                                              index_col=0), with_type=False)
+    print("Target: ", data_target.shape)
+    # Merge 2 parts of data to one DataFrame
+    data = data_features.merge(data_target,
+                               on='ID (автономер в базе)')
+    print("Merged: ", data.shape)
+    data = features_fillna(data)
+    print("FillNA: ", data.shape)
+
+    # Munging data
+    data = add_features(data)
+    # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
+    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    data.drop(drop_titles, axis=1, inplace=True)
+    # ---- NAMES ----
+    data = modify_names(data)
+    # ---- Email ----
+    tqdm.pandas(desc="Work with email  ")
+    data['Есть имейл (указан сервис)'] = data['Есть имейл (указан сервис)'].progress_apply(email)
+    # ---- Add MOBILE ----
+    data = get_mobile(data)
+
+    # Drop required columns:
+    if not drop == '':
+        data.drop(drop, axis=1, inplace=True)
+    # ---- Categorical ----
+    categorical_titles = list(data.select_dtypes(exclude=[np.number]))
+    # print(categorical_titles)
+    work_titles = list(data)
+    if transform_category:
+        data = vectorize(data, titles=categorical_titles)
+    t_t = list(data)
+    t_t.remove('QualityRatioTotal')
+    X = data[t_t]
+    Y = data[list(data_target)[1:]]
+    return X, Y, work_titles
+
+
 # ----------------------------------------- Load data from Excel files and return X, binary Y -------------------------
 def load_data_from_file(path='../data/Target2013_v2.xlsx',
                         use='',
@@ -408,16 +455,10 @@ def missing_data(data, plot=False, title='Features'):
 
 
 # -----------------------------------------  Logistic Regression   -------------------------------------
-def LR():
+def LR(drop='', scoring='roc_auc'):
     """Testing linear method for train"""
-    train_data, train_target = load_data_bin()
-    train_data = add_features(train_data)
-    # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
-    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
-    train_data.drop(drop_titles, axis=1, inplace=True)
-    categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
-    work_titles = list(train_data)
-    train_data = vectorize(train_data, titles=categorical_titles)
+    train_data, train_target, work_titles = load_data(transform_category=True, drop=drop)
+
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
@@ -428,11 +469,23 @@ def LR():
                                 index=train_data.index,
                                 columns=train_data.columns)
     start = timer()
+
+    # Possible scoring function:
+    sc = ['accuracy', 'adjusted_rand_score', 'average_precision', 'f1', 'f1_macro', 'f1_micro', 'f1_samples',
+          'f1_weighted',
+          'neg_log_loss', 'neg_mean_absolute_error', 'neg_mean_squared_error', 'neg_median_absolute_error', 'precision',
+          'precision_macro', 'precision_micro', 'precision_samples', 'precision_weighted', 'r2', 'recall',
+          'recall_macro',
+          'recall_micro', 'recall_samples', 'recall_weighted', 'roc_auc']
+    if scoring not in sc:
+        print('Your scoring finction is not support! Change to default..')
+        scoring = 'roc_auc'
+
     lr = linear_model.LogisticRegression(C=10,
                                          random_state=241,
                                          n_jobs=-1)
     scores = cross_val_score(lr, rescaledData, train_target['QualityRatioTotal'],
-                             cv=cv, scoring='roc_auc',
+                             cv=cv, scoring=scoring,
                              n_jobs=-1)
     score = np.mean(scores)
     tt = timer() - start
@@ -443,7 +496,7 @@ def LR():
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
-def test_logistic(train_data, train_target, work_titles, title=''):
+def test_logistic(drop='', scoring='roc_auc', title=''):
     """Testing linear method for train"""
     # train_data, train_target = load_data_bin()
     # train_data = add_features(train_data)
@@ -462,6 +515,7 @@ def test_logistic(train_data, train_target, work_titles, title=''):
     # # print(categorical_titles)
     # work_titles = list(train_data)
     # train_data = vectorize(train_data, titles=categorical_titles)
+    train_data, train_target, work_titles = load_data(transform_category=True, drop=drop)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
@@ -480,8 +534,8 @@ def test_logistic(train_data, train_target, work_titles, title=''):
         lr = linear_model.LogisticRegression(C=c,
                                              random_state=241,
                                              n_jobs=-1)
-        scores = cross_val_score(lr, rescaledData, train_target,
-                                 cv=cv, scoring='roc_auc',
+        scores = cross_val_score(lr, rescaledData, train_target['QualityRatioTotal'],
+                                 cv=cv, scoring=scoring,
                                  n_jobs=-1)
         score = np.mean(scores)
         quality.append(score)
@@ -498,7 +552,7 @@ def test_logistic(train_data, train_target, work_titles, title=''):
     C_best = C[idx]
     time_best = time[idx]
     print("Наилучший результат достигается при C=" + str(C_best))
-    print("Score is ", score_best)
+    print("Score is ", score_best, ' with scoring=', scoring)
     print("Time elapsed: ", time_best)
     # Draw and save plot
     plt.rcParams.update({'font.size': 22})
@@ -507,25 +561,25 @@ def test_logistic(train_data, train_target, work_titles, title=''):
     ax = fig.add_subplot(111)
     ax.set_title(str(work_titles), fontdict={'fontsize': 10})
     ax.set_ylabel('Score')
-    ax.set_xlabel('log(C)')
+    ax.set_xlabel('log(C), '+scoring)
     ax.plot(_range, quality, 'g', linewidth=2)
     ax.grid(True)
     if not os.path.exists('../data/plots/Models/LogisticRegression/'):
         os.makedirs('../data/plots/Models/LogisticRegression/')
-    plt.savefig('../data/plots/Models/LogisticRegression/' + title + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
+    plt.savefig('../data/plots/Models/LogisticRegression/' + title + datetime.now().strftime('%m%d_%H%M') + '.png')
 
 
 # ----------------------------------------- Test Neural Network  -------------------------------------
-def test_neural():
+def test_neural(train_data, train_target, work_titles, title='', neural_size=(10, 10)):
     """Testing linear method for train"""
-    train_data, train_target = load_data_bin()
-    train_data = add_features(train_data)
-    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
-    train_data.drop(drop_titles, axis=1, inplace=True)
-    train_data = modify_names(train_data)
-    categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
-    work_titles = list(train_data)
-    train_data = vectorize(train_data, titles=categorical_titles)
+    # train_data, train_target = load_data_bin()
+    # train_data = add_features(train_data)
+    # drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    # train_data.drop(drop_titles, axis=1, inplace=True)
+    # train_data = modify_names(train_data)
+    # categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
+    # work_titles = list(train_data)
+    # train_data = vectorize(train_data, titles=categorical_titles)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
@@ -537,13 +591,13 @@ def test_neural():
                                 columns=train_data.columns)
     quality = []
     time = []
-    _range = np.arange(-5, 3)
+    _range = np.arange(-4, 1)
     C = np.power(10.0, _range)
     for c in C:
         start = timer()
-        lr = MLPClassifier(alpha=c, hidden_layer_sizes=(10, 10),
+        lr = MLPClassifier(alpha=c, hidden_layer_sizes=neural_size,
                            random_state=241)
-        scores = cross_val_score(lr, rescaledData, train_target['QualityRatioTotal'],
+        scores = cross_val_score(lr, rescaledData, train_target,
                                  cv=cv, scoring='roc_auc',
                                  n_jobs=-1)
         score = np.mean(scores)
@@ -575,7 +629,8 @@ def test_neural():
     ax.grid(True)
     if not os.path.exists('../data/plots/Models/Neural/'):
         os.makedirs('../data/plots/Models/Neural/')
-    plt.savefig('../data/plots/Models/Neural/MLPClassifier_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
+    plt.savefig(
+        '../data/plots/Models/Neural/MLPClassifier_' + title + '_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
 
 
 # ----------------------------------------- Neural Network Model -------------------------------------
@@ -698,7 +753,7 @@ def print_bar(data, tmp='Имя', filna=False, head=10):
     plt.show()
 
 
-def load_dataset(split_sex=False, split_QType=False):
+def load_dataset(split_sex=False, split_QType=False, save_categorical=False):
     """Loading required dataset from steady CSV-files"""
     # Loading from steady-files:
     # update_csv(use='A')
@@ -736,7 +791,10 @@ def load_dataset(split_sex=False, split_QType=False):
         work_titles.remove('Пол')
     if split_QType:
         categorical_titles.remove('QTotalCalcType')
-    data = vectorize(data, titles=categorical_titles)
+
+    # Convert category to binary-vectors
+    if not save_categorical:
+        data = vectorize(data, titles=categorical_titles)
 
     # Splitting datasets with Sex or QType column:
     train_data = list()
