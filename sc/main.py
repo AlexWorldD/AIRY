@@ -37,17 +37,6 @@ if __name__ == '__main__':
     # print(list(pd.DataFrame(mails[mails>10]).T))
     # print_bar(train_data, tmp=tmp, filna=True)
 
-    # train_data = vectorize(train_data)
-    # drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
-    # train_data.drop(drop_titles, axis=1, inplace=True)
-    # scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-    # rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
-    #                             index=train_data.index,
-    #                             columns=train_data.columns)
-    # scaler2 = preprocessing.StandardScaler()
-    # rescaledData = pd.DataFrame(scaler2.fit_transform(rescaledData.values),
-    #                             index=rescaledData.index,
-    #                             columns=rescaledData.columns)
     # print(rescaledData)
     # LR()
 
@@ -56,10 +45,33 @@ if __name__ == '__main__':
                shuffle=True,
                random_state=241)
     # neural()
-    test_logistic(title='MobileOperator')
+    # test_logistic(title='MobileOperator')
     # data = load_features(forceAll=True)
     # counts = data.describe(include='all').loc[:'count'].T.sort_values(by='count', ascending=False)
     # plt.show(counts.head(25).plot.bar())
     # print(counts.head(25))
 
+    # data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
+    #                             index_col=0)
+    # print("Features: ", data_features.shape)
+    # data_target = binarize_target(pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
+    #                                           index_col=0), with_type=True)
+    # print("Target: ", data_target.shape)
+    # # Merge 2 parts of data to one DataFrame
+    # data = data_features.merge(data_target,
+    #                            on='ID (автономер в базе)')
+    # print("Merged: ", data.shape)
+    # data = features_fillna(data)
+    # print("FillNA: ", data.shape)
+    #
+    # train_data = data[list(data_features)]
+    # train_target = data['QualityRatioTotal']
+    # gr = data.groupby(by='QTotalCalcType').get_group('По выработке')
+    # print(gr)
+    # print(train_data, train_target)
+    train_data, train_target, work_titles = load_dataset(split_QType=False)
+    print(train_data[0].shape)
+    # t_d, t_t = load_data_from_file(use=['A', 'B', 'C'])
+    # print(t_d)
+    # test_logistic(train_data[1], train_target[1], work_titles, title='WithQTYPESplit_2_')
     print('Elapsed time:', timer() - start)

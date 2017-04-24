@@ -272,10 +272,13 @@ def binary_quality_ratio(row, alpha=0.7, mode='QTotal'):
 # ----------------------------------------- Modify target data -------------------------------------
 
 
-def binarize_target(data_target):
+def binarize_target(data_target, with_type=False):
     """Special function for conversion" raw-target to [0, 1] values"""
     # TODO add cleaning from Peaks
     temp_names = list(data_target)
+    # Delete QTotalCalcType from title for deleting
+    if with_type:
+        temp_names.remove('QTotalCalcType')
     tqdm.pandas(desc="Calculate QualityRatio for staff")
     # Calculate QualityRatio:
     data_target['QualityRatioTotal'] = data_target.progress_apply(binary_quality_ratio, axis=1)
@@ -332,6 +335,35 @@ def load_data_bin():
     print("Features: ", data_features.shape)
     data_target = binarize_target(pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
                                               index_col=0))
+    print("Target: ", data_target.shape)
+    # Merge 2 parts of data to one DataFrame
+    data = data_features.merge(data_target,
+                               on='ID (автономер в базе)')
+    print("Merged: ", data.shape)
+    data = features_fillna(data)
+    print("FillNA: ", data.shape)
+
+    X = data[list(data_features)]
+    Y = data[list(data_target)[1:]]
+    return X, Y
+
+
+# ----------------------------------------- Load data from Excel files and return X, binary Y -------------------------
+def load_data_from_file(path='../data/Target2013_v2.xlsx',
+                        use='',
+                        forceAll=False):
+    """Loading data and returning data_features and data_target DataFrames. Return required columns as is"""
+    # Loading from steady-files:
+    # update_csv(use='A')
+    priorities = ['Важный',
+                  'Средняя']
+    priorities.extend(use)
+    data_features = load_features(priorities=priorities, forceAll=forceAll)
+    data_target = load_targets(path=path, forceAll=forceAll)
+    print('Download from Excel!')
+    print("Features: ", data_features.shape)
+    data_target = binarize_target(data_target)
+
     print("Target: ", data_target.shape)
     # Merge 2 parts of data to one DataFrame
     data = data_features.merge(data_target,
@@ -411,25 +443,25 @@ def LR():
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
-def test_logistic(title=''):
+def test_logistic(train_data, train_target, work_titles, title=''):
     """Testing linear method for train"""
-    train_data, train_target = load_data_bin()
-    train_data = add_features(train_data)
-    # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
-    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
-    train_data.drop(drop_titles, axis=1, inplace=True)
-    # ---- NAMES ----
-    train_data = modify_names(train_data)
-    # ---- Email ----
-    tqdm.pandas(desc="Work with email  ")
-    train_data['Есть имейл (указан сервис)'] = train_data['Есть имейл (указан сервис)'].progress_apply(email)
-    # ---- Add MOBILE ----
-    train_data = get_mobile(train_data)
-    # ---- Categorical ----
-    categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
-    # print(categorical_titles)
-    work_titles = list(train_data)
-    train_data = vectorize(train_data, titles=categorical_titles)
+    # train_data, train_target = load_data_bin()
+    # train_data = add_features(train_data)
+    # # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
+    # drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    # train_data.drop(drop_titles, axis=1, inplace=True)
+    # # ---- NAMES ----
+    # train_data = modify_names(train_data)
+    # # ---- Email ----
+    # tqdm.pandas(desc="Work with email  ")
+    # train_data['Есть имейл (указан сервис)'] = train_data['Есть имейл (указан сервис)'].progress_apply(email)
+    # # ---- Add MOBILE ----
+    # train_data = get_mobile(train_data)
+    # # ---- Categorical ----
+    # categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
+    # # print(categorical_titles)
+    # work_titles = list(train_data)
+    # train_data = vectorize(train_data, titles=categorical_titles)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
@@ -448,7 +480,7 @@ def test_logistic(title=''):
         lr = linear_model.LogisticRegression(C=c,
                                              random_state=241,
                                              n_jobs=-1)
-        scores = cross_val_score(lr, rescaledData, train_target['QualityRatioTotal'],
+        scores = cross_val_score(lr, rescaledData, train_target,
                                  cv=cv, scoring='roc_auc',
                                  n_jobs=-1)
         score = np.mean(scores)
@@ -664,3 +696,63 @@ def print_bar(data, tmp='Имя', filna=False, head=10):
     plt.subplot(mails.head(head).plot.bar())
     plt.tight_layout()
     plt.show()
+
+
+def load_dataset(split_sex=False, split_QType=False):
+    """Loading required dataset from steady CSV-files"""
+    # Loading from steady-files:
+    # update_csv(use='A')
+    data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
+                                index_col=0)
+    print("Features: ", data_features.shape)
+    data_target = binarize_target(pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
+                                              index_col=0), with_type=split_QType)
+    print("Target: ", data_target.shape)
+    # Merge 2 parts of data to one DataFrame
+    data = data_features.merge(data_target,
+                               on='ID (автономер в базе)')
+    print("Merged: ", data.shape)
+    data = features_fillna(data)
+    print("FillNA: ", data.shape)
+
+    # Munging data
+    data = add_features(data)
+    # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
+    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    data.drop(drop_titles, axis=1, inplace=True)
+    # ---- NAMES ----
+    data = modify_names(data)
+    # ---- Email ----
+    tqdm.pandas(desc="Work with email  ")
+    data['Есть имейл (указан сервис)'] = data['Есть имейл (указан сервис)'].progress_apply(email)
+    # ---- Add MOBILE ----
+    data = get_mobile(data)
+    # ---- Categorical ----
+    categorical_titles = list(data.select_dtypes(exclude=[np.number]))
+    work_titles = list(data)
+    # print(categorical_titles)
+    if split_sex:
+        categorical_titles.remove('Пол')
+        work_titles.remove('Пол')
+    if split_QType:
+        categorical_titles.remove('QTotalCalcType')
+    data = vectorize(data, titles=categorical_titles)
+
+    # Splitting datasets with Sex or QType column:
+    train_data = list()
+    train_target = list()
+    t_t = list(data)
+    t_t.remove('QualityRatioTotal')
+    if split_QType:
+        gr = data.groupby(by='QTotalCalcType')
+        t_t.remove('QTotalCalcType')
+        X_1 = gr.get_group('По ставке')
+        X_2 = gr.get_group('По выработке')
+        train_data.append(X_1[t_t])
+        train_target.append(X_1['QualityRatioTotal'])
+        train_data.append(X_2[t_t])
+        train_target.append(X_2['QualityRatioTotal'])
+    else:
+        train_data.append(data[t_t])
+        train_target.append(data['QualityRatioTotal'])
+    return train_data, train_target, work_titles
