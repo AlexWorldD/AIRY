@@ -3,7 +3,7 @@
 
 import numpy as np
 import pandas as pd
-import seaborn
+import seaborn as sns
 from tqdm import tqdm, tqdm_pandas, trange
 import matplotlib.pyplot as plt
 from timeit import default_timer as timer
@@ -13,6 +13,7 @@ from sklearn.model_selection import KFold, cross_val_score
 from sklearn import linear_model
 from sklearn.neural_network import MLPClassifier
 import os
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn import preprocessing
@@ -183,9 +184,9 @@ def add_features(data, split_bd=True, zodiac_sign=True):
 def category_encode(data, titles=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение'], mode='OneHot'):
     # Work with categorical features such as Name
     # TODO change to OneHotEncoder for test data transformation. - is it necessary??
-    if mode=='OneHot':
+    if mode == 'OneHot':
         data = pd.get_dummies(data, columns=titles, sparse=False)
-    elif mode=='LabelsEncode':
+    elif mode == 'LabelsEncode':
         data = MultiColumnEncoder.EncodeCategorical(columns=titles).fit_transform(data)
     return data
 
@@ -903,3 +904,55 @@ def load_dataset(split_sex=False, split_QType=False, save_categorical=False):
         train_data.append(data[t_t])
         train_target.append(data['QualityRatioTotal'])
     return train_data, train_target, work_titles
+
+
+def test_RandomForest(estimators=[4, 10, 20, 50, 100], title='RandomForest'):
+    train_data, train_target, work_titles = load_data(transform_category='LabelsEncode')
+    print(train_data.shape)
+    # KFold for splitting
+    cv = KFold(n_splits=5,
+               shuffle=True,
+               random_state=241)
+
+    # Build model:
+    quality = []
+    time = []
+    # estimators = [2000]
+    for est in estimators:
+        start = timer()
+        rf = RandomForestClassifier(n_estimators=est, random_state=241)
+        scores = cross_val_score(rf, train_data, train_target['QualityRatioTotal'],
+                                 cv=cv, scoring='roc_auc',
+                                 n_jobs=-1)
+        score = np.mean(scores)
+        quality.append(score)
+        print("Estimators number is " + str(est))
+        print("Score is ", score)
+        tt = timer() - start
+        time.append(tt)
+        print("Time elapsed: ", tt)
+        print("""-----------¯\_(ツ)_/¯ -----------""")
+
+    # Draw it:
+    score_best = max(quality)
+    idx = quality.index(score_best)
+    est_best = estimators[idx]
+    time_best = time[idx]
+    print("Наилучший результат достигается при n_est=" + str(est_best))
+    print("Score is ", score_best)
+    print("Time elapsed: ", time_best)
+    # Draw and save plot
+    sns.set(font_scale=2)
+    # TODO change all plotting to SEABORN
+    plt.rcParams.update({'font.size': 22})
+    fig = plt.figure("Random Forest: ", figsize=(16, 12))
+    fig.suptitle('RF', fontweight='bold')
+    ax = fig.add_subplot(111)
+    ax.set_title(str(work_titles), fontdict={'fontsize': 10})
+    ax.set_ylabel('Score')
+    ax.set_xlabel('N estimators')
+    ax.plot(estimators, quality, 'g', linewidth=2)
+    ax.grid(True)
+    if not os.path.exists('../data/plots/Models/RandomForest/'):
+        os.makedirs('../data/plots/Models/RandomForest/')
+    plt.savefig('../data/plots/Models/RandomForest/RF_' + title + '_' + datetime.now().strftime('%m%d_%H%M') + '.png')
