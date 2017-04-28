@@ -3,6 +3,7 @@
 
 import numpy as np
 import pandas as pd
+import seaborn
 from tqdm import tqdm, tqdm_pandas, trange
 import matplotlib.pyplot as plt
 from timeit import default_timer as timer
@@ -15,6 +16,9 @@ import os
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn import preprocessing
+from sklearn.feature_selection import SelectKBest, SelectFromModel
+from sklearn.feature_selection import chi2
+import MultiColumnEncoder
 
 # Disable SettingWithCopyWarning
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -110,33 +114,32 @@ def update_csv(use=''):
 
 
 # ----------------------------------------- Features fillNA ----------------------------------------------------
-def features_fillna(data):
+def features_fillna(data, fillna=True):
     """Special function for handling missing data"""
     # Transform Birthday column to DataTime format:
     data['Дата рождения'] = pd.to_datetime(data['Дата рождения'], errors='coerce')
-
-    # --------------------------------- FillNA ---------------------------------
     # TODO add conversion from age column to integer - is it necessary??
     age_mask = (data['Возраст'].isnull()) & (data['Дата рождения'].notnull())
     data['Возраст'][age_mask] = data[age_mask].apply(fix_age, axis=1)
-    # FillNA for Patronymic
-    # TODO add cleaning from rubbish such as '---' and '0---'
-
-    data['Отчество'].fillna('Не указано', inplace=True)
-    # FillNA for family
-    data['Семейное положение'].fillna('Не указано', inplace=True)
     # FillNA for Attraction in work: 1 if some text was typed and 0 otherwise.
     # TODO add bag of words - is it necessary??
     data['Что привлекает в работе'][data['Что привлекает в работе'].notnull()] = \
         data['Что привлекает в работе'].notnull().apply(lambda t: 0.5)
-    data['Что привлекает в работе'].fillna(0, inplace=True)
     # Fill NA for current position
     data['Должность'][data['Должность'].notnull()] = \
         data['Должность'].notnull().apply(lambda t: 0.5)
     data['Должность'].fillna(0, inplace=True)
+    if fillna:
+        # --------------------------------- FillNA ---------------------------------
+        # FillNA for Patronymic
+        # TODO add cleaning from rubbish such as '---' and '0---'
 
-    data['Есть имейл (указан сервис)'].fillna('Не указано', inplace=True)
-    data['Первые 4 цифры моб телефона'].fillna(0, inplace=True)
+        data['Отчество'].fillna('Не указано', inplace=True)
+        # FillNA for family
+        data['Семейное положение'].fillna('Не указано', inplace=True)
+        data['Что привлекает в работе'].fillna(0, inplace=True)
+        data['Есть имейл (указан сервис)'].fillna('Не указано', inplace=True)
+        data['Первые 4 цифры моб телефона'].fillna(0, inplace=True)
     return data.dropna()
 
 
@@ -177,11 +180,14 @@ def add_features(data, split_bd=True, zodiac_sign=True):
 
 
 # ----------------------------------------- Vectorize features -------------------------------------
-def vectorize(data, titles=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение']):
+def category_encode(data, titles=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение'], mode='OneHot'):
     # Work with categorical features such as Name
     # TODO change to OneHotEncoder for test data transformation. - is it necessary??
-    dummies = pd.get_dummies(data, columns=titles, sparse=False)
-    return dummies
+    if mode=='OneHot':
+        data = pd.get_dummies(data, columns=titles, sparse=False)
+    elif mode=='LabelsEncode':
+        data = MultiColumnEncoder.EncodeCategorical(columns=titles).fit_transform(data)
+    return data
 
 
 # ----------------------------------------- Get father's names + lowercase() -------------------------------------
@@ -349,7 +355,7 @@ def load_data_bin():
 
 
 # ----------------------------------------- Loading data v2.0 -------------------------------------
-def load_data(transform_category=False, drop=''):
+def load_data(transform_category='', drop='', fillna=True):
     """Loading data from steady CSV-files"""
     # Loading from steady-files:
     # update_csv(use='A')
@@ -363,7 +369,8 @@ def load_data(transform_category=False, drop=''):
     data = data_features.merge(data_target,
                                on='ID (автономер в базе)')
     print("Merged: ", data.shape)
-    data = features_fillna(data)
+    # missing_data(data, plot=True)
+    data = features_fillna(data, fillna=fillna)
     print("FillNA: ", data.shape)
 
     # Munging data
@@ -386,8 +393,8 @@ def load_data(transform_category=False, drop=''):
     categorical_titles = list(data.select_dtypes(exclude=[np.number]))
     # print(categorical_titles)
     work_titles = list(data)
-    if transform_category:
-        data = vectorize(data, titles=categorical_titles)
+    if transform_category in ['OneHot', 'LabelsEncode']:
+        data = category_encode(data, titles=categorical_titles, mode=transform_category)
     t_t = list(data)
     t_t.remove('QualityRatioTotal')
     X = data[t_t]
@@ -429,7 +436,10 @@ def missing_data(data, plot=False, title='Features'):
     """Analysis data and find missing values"""
     counts = data.describe(include='all').loc[:'count'].T.sort_values(by='count', ascending=False)
     if plot:
-        plt.show(counts.head(15).plot.bar())
+        # plt.figure("Data Analysis: ", figsize=(10, 6))
+        plt.subplot(counts.head(25).plot.barh())
+        plt.tight_layout()
+        plt.show()
     print(counts)
     total = len(data)
     missed_data = counts[counts['count'] <= total].apply(lambda tmp:
@@ -455,19 +465,26 @@ def missing_data(data, plot=False, title='Features'):
 
 
 # -----------------------------------------  Logistic Regression   -------------------------------------
-def LR(drop='', scoring='roc_auc'):
+def LR(C=1, drop='', scoring='roc_auc', selectK=''):
     """Testing linear method for train"""
     train_data, train_target, work_titles = load_data(transform_category=True, drop=drop)
-
+    if not selectK == '':
+        print(train_data.shape)
+        train_data_new = SelectKBest(chi2, k=selectK).fit_transform(train_data, train_target)
+        print(train_data_new.shape)
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        rescaledData = pd.DataFrame(scaler.fit_transform(train_data_new),
+                                    index=train_data.index)
+    else:
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                    index=train_data.index,
+                                    columns=train_data.columns)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
                random_state=241)
 
-    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-    rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
-                                index=train_data.index,
-                                columns=train_data.columns)
     start = timer()
 
     # Possible scoring function:
@@ -481,22 +498,26 @@ def LR(drop='', scoring='roc_auc'):
         print('Your scoring finction is not support! Change to default..')
         scoring = 'roc_auc'
 
-    lr = linear_model.LogisticRegression(C=10,
+    lr = linear_model.LogisticRegression(C=C,
                                          random_state=241,
                                          n_jobs=-1)
+    # model = SelectFromModel(lr, prefit=True)
+    # X_new = model.transform(rescaledData)
+    # print(X_new.shape)
     scores = cross_val_score(lr, rescaledData, train_target['QualityRatioTotal'],
                              cv=cv, scoring=scoring,
                              n_jobs=-1)
     score = np.mean(scores)
     tt = timer() - start
-    print("C parameter is " + str(10))
+    print("C parameter is " + str(C))
     print("Score is ", score)
     print("Time elapsed: ", tt)
     print("""-----------¯\_(ツ)_/¯ -----------""")
+    return score, selectK
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
-def test_logistic(drop='', scoring='roc_auc', title=''):
+def test_logistic(drop='', scoring='roc_auc', title='', selectK='', fillna=True):
     """Testing linear method for train"""
     # train_data, train_target = load_data_bin()
     # train_data = add_features(train_data)
@@ -515,16 +536,24 @@ def test_logistic(drop='', scoring='roc_auc', title=''):
     # # print(categorical_titles)
     # work_titles = list(train_data)
     # train_data = vectorize(train_data, titles=categorical_titles)
-    train_data, train_target, work_titles = load_data(transform_category=True, drop=drop)
+    train_data, train_target, work_titles = load_data(transform_category=True, drop=drop, fillna=fillna)
+    if not selectK == '':
+        print(train_data.shape)
+        train_data_new = SelectKBest(chi2, k=selectK).fit_transform(train_data, train_target)
+        print(train_data_new.shape)
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        rescaledData = pd.DataFrame(scaler.fit_transform(train_data_new),
+                                    index=train_data.index)
+    else:
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                    index=train_data.index,
+                                    columns=train_data.columns)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
                random_state=241)
 
-    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-    rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
-                                index=train_data.index,
-                                columns=train_data.columns)
     quality = []
     time = []
     _range = np.arange(-4, 2)
@@ -561,7 +590,7 @@ def test_logistic(drop='', scoring='roc_auc', title=''):
     ax = fig.add_subplot(111)
     ax.set_title(str(work_titles), fontdict={'fontsize': 10})
     ax.set_ylabel('Score')
-    ax.set_xlabel('log(C), '+scoring)
+    ax.set_xlabel('log(C), ' + scoring)
     ax.plot(_range, quality, 'g', linewidth=2)
     ax.grid(True)
     if not os.path.exists('../data/plots/Models/LogisticRegression/'):
@@ -633,6 +662,62 @@ def test_neural(train_data, train_target, work_titles, title='', neural_size=(10
         '../data/plots/Models/Neural/MLPClassifier_' + title + '_' + datetime.now().strftime('%Y%m%d_%H%M%S') + '.png')
 
 
+def test_GBC(estimators=[10, 20, 50, 100], selecK=200, title=''):
+    train_data, train_target, work_titles = load_data(transform_category=True)
+    print(train_data.shape)
+    train_data_new = SelectKBest(chi2, k=selecK).fit_transform(train_data, train_target)
+    print(train_data_new.shape)
+    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+    rescaledData = pd.DataFrame(scaler.fit_transform(train_data_new),
+                                index=train_data.index)
+    # KFold for splitting
+    cv = KFold(n_splits=5,
+               shuffle=True,
+               random_state=241)
+
+    # Build model:
+    quality = []
+    time = []
+    # estimators = [2000]
+    for est in estimators:
+        start = timer()
+        gbc = GradientBoostingClassifier(n_estimators=est,
+                                         random_state=241)
+        scores = cross_val_score(gbc, rescaledData, train_target,
+                                 cv=cv, scoring='roc_auc',
+                                 n_jobs=-1)
+        score = np.mean(scores)
+        quality.append(score)
+        print("Estimators number is " + str(est))
+        print("Score is ", score)
+        tt = timer() - start
+        time.append(tt)
+        print("Time elapsed: ", tt)
+        print("""-----------¯\_(ツ)_/¯ -----------""")
+
+    # Draw it:
+    score_best = max(quality)
+    idx = quality.index(score_best)
+    est_best = estimators[idx]
+    time_best = time[idx]
+    print("Наилучший результат достигается при n_est=" + str(est_best))
+    print("Score is ", score_best)
+    print("Time elapsed: ", time_best)
+    # Draw and save plot
+    plt.rcParams.update({'font.size': 22})
+    fig = plt.figure("Gradient Boosting: ", figsize=(16, 12))
+    fig.suptitle('GBC', fontweight='bold')
+    ax = fig.add_subplot(111)
+    ax.set_title(str(work_titles), fontdict={'fontsize': 10})
+    ax.set_ylabel('Score')
+    ax.set_xlabel('N estimators')
+    ax.plot(estimators, quality, 'g', linewidth=2)
+    ax.grid(True)
+    if not os.path.exists('../data/plots/Models/GBC/'):
+        os.makedirs('../data/plots/Models/GBC/')
+    plt.savefig('../data/plots/Models/GBC/Gradient_' + title + '_' + datetime.now().strftime('%m%d_%H%M') + '.png')
+
+
 # ----------------------------------------- Neural Network Model -------------------------------------
 def neural(c=0.1):
     """Build neural network model"""
@@ -643,7 +728,7 @@ def neural(c=0.1):
     train_data = modify_names(train_data)
     categorical_titles = list(train_data.select_dtypes(exclude=[np.number]))
     work_titles = list(train_data)
-    train_data = vectorize(train_data, titles=categorical_titles)
+    train_data = category_encode(train_data, titles=categorical_titles)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
@@ -742,13 +827,17 @@ def get_mobile(data, mode='Operator'):
 
 
 # ----------------------------------------- Print bar of required column -------------------------------------
-def print_bar(data, tmp='Имя', filna=False, head=10):
+def print_bar(data, tmp='Имя', filna=False, head=10, sort=True, vh=False):
     mails = data.groupby(by=tmp).size()
     if filna:
         mails.drop('Не указано', inplace=True)
-    mails.sort_values(ascending=False, inplace=True)
+    if sort:
+        mails.sort_values(ascending=False, inplace=True)
     plt.figure("Neural network: ", figsize=(10, 6))
-    plt.subplot(mails.head(head).plot.bar())
+    if vh:
+        plt.subplot(mails.head(head).plot.barh())
+    else:
+        plt.subplot(mails.head(head).plot.bar())
     plt.tight_layout()
     plt.show()
 
@@ -794,7 +883,7 @@ def load_dataset(split_sex=False, split_QType=False, save_categorical=False):
 
     # Convert category to binary-vectors
     if not save_categorical:
-        data = vectorize(data, titles=categorical_titles)
+        data = category_encode(data, titles=categorical_titles)
 
     # Splitting datasets with Sex or QType column:
     train_data = list()

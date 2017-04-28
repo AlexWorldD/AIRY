@@ -11,6 +11,11 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold, cross_val_score
 from timeit import default_timer as timer
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import chi2
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+
 
 # As CONST_VAR for linking features and target
 ID = 'ID (автономер в базе)'
@@ -22,7 +27,42 @@ if __name__ == '__main__':
                   'Средняя']
     # update_csv(use=['A', 'B', 'C'])
     # TODO DROP the ID-column
-    # train_data, train_target = load_data_bin()
+
+    train_data, train_target, w_t = load_data(transform_category='LabelsEncode')
+    print(train_data)
+    # print_bar(train_data, tmp='Имя', vh=True)
+    # test_logistic(title='Select200', selectK=200, drop=['Что привлекает в работе', 'Семейное положение','Должность'])
+    # print(train_data.shape)
+    # num_titles = list(train_data.select_dtypes(include=[np.number]))
+    # print(num_titles)
+    # scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+    # rescaledData = pd.DataFrame(scaler.fit_transform(train_data),
+    #                             index=train_data.index)
+    # print(rescaledData)
+    # KFold for splitting
+    cv = KFold(n_splits=5,
+               shuffle=True,
+               random_state=241)
+
+
+    # Build model:
+    # rf = RandomForestClassifier(random_state=1)
+    ## Set GRID:
+    # grid = {'n_estimators': range(1, 51)}
+    # # Grid search:
+    # start = timer()
+    # grid_s = GridSearchCV(rf, grid, scoring='r2', cv=cv, n_jobs=-1)
+    # grid_s.fit(train_data, train_target)
+    # end = timer()
+    # print("Time: ", end - start)
+    # res = pd.DataFrame(grid_s.cv_results_)[['mean_test_score', 'param_n_estimators']]
+    # res_good = res[res['mean_test_score'] > 0.52]
+    # res_good = res_good.sort_values(by='param_n_estimators')
+
+    # print(train_data.shape)
+    # train_data_new = SelectKBest(chi2, k=16).fit_transform(train_data, train_target)
+    # print(train_data_new)
+    # LR(selectK=200)
     # train_data = get_mobile(train_data, mode='Numbers')
     # print(train_data['Mobile'])
     # mobiles = train_data.groupby(by='Mobile').size()
@@ -40,10 +80,6 @@ if __name__ == '__main__':
     # print(rescaledData)
     # LR()
 
-    # KFold for splitting
-    cv = KFold(n_splits=5,
-               shuffle=True,
-               random_state=241)
     # neural()
     # test_logistic(title='MobileOperator')
     # data = load_features(forceAll=True)
@@ -72,11 +108,12 @@ if __name__ == '__main__':
     # train_data, train_target, work_titles = load_dataset(split_QType=False, save_categorical=True)
     # train_data, train_target, work_titles = load_data(transform_category=False)
     # print(list(train_data))
-    test_logistic(title='TestTT', scoring='accuracy')
+    # test_logistic(title='TestTT')
     # LR()
     # print(train_target.groupby(by='QualityRatioTotal').size())
     # test_neural(train_data[0], train_target[0], work_titles, neural_size=(10, 10), title='10-10')
     # t_d, t_t = load_data_from_file(use=['A', 'B', 'C'])
     # print(t_d)
     # test_logistic(train_data[1], train_target[1], work_titles, title='WithQTYPESplit_2_')
+
     print('Elapsed time:', timer() - start)
