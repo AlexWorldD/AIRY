@@ -284,7 +284,7 @@ def binarize_target(data_target, with_type=False):
     # TODO add cleaning from Peaks
     temp_names = list(data_target)
     # Delete QTotalCalcType from title for deleting
-    if with_type:
+    if not with_type:
         temp_names.remove('QTotalCalcType')
     tqdm.pandas(desc="Calculate QualityRatio for staff")
     # Calculate QualityRatio:
@@ -956,3 +956,50 @@ def test_RandomForest(estimators=[4, 10, 20, 50, 100], title='RandomForest'):
     if not os.path.exists('../data/plots/Models/RandomForest/'):
         os.makedirs('../data/plots/Models/RandomForest/')
     plt.savefig('../data/plots/Models/RandomForest/RF_' + title + '_' + datetime.now().strftime('%m%d_%H%M') + '.png')
+
+
+def load_data_v2(transform_category='', drop='', fillna=True):
+    """Loading data from steady CSV-files"""
+    # Loading from steady-files:
+    # update_csv(use='A')
+    data_features = pd.read_csv('../data/tmp/F13.csv', encoding='cp1251',
+                                index_col=0)
+    print("Features: ", data_features.shape)
+    data_target = binarize_target(pd.read_csv('../data/tmp/T13.csv', encoding='cp1251',
+                                              index_col=0), with_type=False)
+    print("Target: ", data_target.shape)
+    # Merge 2 parts of data to one DataFrame
+    data = data_features.merge(data_target,
+                               on='ID (автономер в базе)')
+    print("Merged: ", data.shape)
+    # missing_data(data, plot=True)
+    data = features_fillna(data, fillna=fillna)
+    print("FillNA: ", data.shape)
+
+    # Munging data
+    data = add_features(data)
+    # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
+    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    data.drop(drop_titles, axis=1, inplace=True)
+    # ---- NAMES ----
+    data = modify_names(data)
+    # ---- Email ----
+    tqdm.pandas(desc="Work with email  ")
+    data['Есть имейл (указан сервис)'] = data['Есть имейл (указан сервис)'].progress_apply(email)
+    # ---- Add MOBILE ----
+    data = get_mobile(data)
+
+    # Drop required columns:
+    if not drop == '':
+        data.drop(drop, axis=1, inplace=True)
+    # ---- Categorical ----
+    categorical_titles = list(data.select_dtypes(exclude=[np.number]))
+    # print(categorical_titles)
+    work_titles = list(data)
+    if transform_category in ['OneHot', 'LabelsEncode']:
+        data = category_encode(data, titles=categorical_titles, mode=transform_category)
+    t_t = list(data)
+    t_t.remove('QualityRatioTotal')
+    X = data[t_t]
+    Y = data[list(data_target)[1:]]
+    return X, Y, work_titles

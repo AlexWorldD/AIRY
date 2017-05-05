@@ -15,10 +15,11 @@ from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
-
+import seaborn as sns
 
 # As CONST_VAR for linking features and target
 ID = 'ID (автономер в базе)'
+
 
 if __name__ == '__main__':
     start = timer()
@@ -28,8 +29,11 @@ if __name__ == '__main__':
     # update_csv(use=['A', 'B', 'C'])
     # TODO DROP the ID-column
 
-    test_RandomForest()
-    # train_data, train_target, w_t = load_data(transform_category='LabelsEncode')
+
+
+    # test_RandomForest(estimators=200)
+    train_data, train_target, w_t = load_data(transform_category='')
+    # print_bar_v2(train_data, tmp='Mobile')
     # print(train_data)
     # # KFold for splitting
     # cv = KFold(n_splits=5,
