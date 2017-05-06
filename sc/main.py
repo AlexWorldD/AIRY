@@ -29,10 +29,17 @@ if __name__ == '__main__':
     # update_csv(use=['A', 'B', 'C'])
     # TODO DROP the ID-column
 
+    # train_data, train_target, w_t = load_data_v2(transform_category='')
+    # print_bar(train_data, tmp='Имя', head=50)
+    # test_RandomForest()
+    test_logistic_v2(selectK=250, title='Version2.0', drop=['Отчество'])
+
+    # types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64}
 
 
     # test_RandomForest(estimators=200)
-    train_data, train_target, w_t = load_data(transform_category='')
+    # train_data, train_target, w_t = load_data(transform_category='')
+    # print(train_target)
     # print_bar_v2(train_data, tmp='Mobile')
     # print(train_data)
     # # KFold for splitting
