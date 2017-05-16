@@ -157,7 +157,7 @@ def features_fillna(data, fillna=True):
 # ----------------------------------------- Get age info from BD column ----------------------------------------
 def fix_age(row):
     """Special function for calculating age via Birthday"""
-    return 2014 - row['Дата рождения'].year
+    return 2016 - row['Дата рождения'].year
 
 
 # ----------------------------------------- Get zodiac sign from BD column -------------------------------------
@@ -182,6 +182,8 @@ def add_features(data, split_bd=True, zodiac_sign=True):
         data['DayOfBirth'] = data['Дата рождения'].progress_apply(lambda t: t.day)
         tqdm.pandas(desc="Splitting BD to month ")
         data['MonthOfBirth'] = data['Дата рождения'].progress_apply(lambda t: t.month)
+        tqdm.pandas(desc="Splitting BD to day of week ")
+        data['DayOfWeek'] = data['Дата рождения'].progress_apply(lambda t: t.weekday())
     if zodiac_sign:
         tqdm.pandas(desc="Getting zodiac sign   ")
         data['Zodiac'] = data['Дата рождения'].progress_apply(zodiac)
@@ -209,8 +211,8 @@ def modify_names(data, popular=False):
     if popular:
         tqdm.pandas(desc="Work with NAME.v2       ")
         data['Имя'] = data['Имя'].progress_apply(popular_names)
-    tqdm.pandas(desc="Work with patronymic  ")
-    data['Отчество'] = data['Отчество'].progress_apply(patronymic)
+    # tqdm.pandas(desc="Work with patronymic  ")
+    # data['Отчество'] = data['Отчество'].progress_apply(patronymic)
     return data
 
 
@@ -272,18 +274,16 @@ def binary_quality_ratio(row, alpha=0.7, mode='QTotal'):
             if row['QTotalCalcType'] == 'По ставке':
                 return 1
             elif row['QTotalCalcType'] == 'По выработке':
-                # Additional statement for skipping HighPeeks:
-                if row[required_title] < 15:
+                # Additional statement for skipping HighPeaks:
+                if row[required_title] < 100:
                     if row[required_title] >= alpha:
                         return 1
                     else:
-                        return 0
+                        return -1
         elif row['Статус смены (Смена)'] == 'Подтвержден':
-            return 0
+            return -1
     elif row['Тип биллинга'] == 'Штрафной':
-        return 0
-    else:
-        return 1
+        return -1
 
 
 # ----------------------------------------- Modify target data -------------------------------------
@@ -779,19 +779,17 @@ def patronymic(t):
 
 # ----------------------------------------- Clean e-mail column -------------------------------------
 def email(t):
-    """Special function for cleaning patronymic"""
+    """Special function for cleaning email"""
     if not t.find('gmail') == -1 or not t.find('jmail'):
         return 'gmail'
-    elif not t.find('mail') == -1:
+    elif not t.find('mail') == -1 and t.find('hot') == -1:
         return 'mail'
     elif not t.find('ya') == -1 or not t.find('dex'):
         return 'yandex'
     elif not t.find('rambl') == -1:
         return 'rambler'
-    elif t in ['Не указано', 'list.ru', 'maxipost.ru', 'bk.ru', 'inbox.ru', 'narod.ru', 'icloud.com']:
-        return t
     else:
-        return 'Other'
+        return t
 
 
 # ----------------------------------------- Get mobile carrier -------------------------------------
@@ -802,15 +800,15 @@ def mobile(t, mode='Operator'):
     else:
         code = int(t) // 100
     if mode == 'Operator':
-        MTC = [902, 904, 908, 910, 911, 912, 913, 914, 915, 916, 917, 918, 919, 950, 978, 980, 981, 982, 983, 984, 985,
-               986,
-               987, 988, 989]
-        BEELINE = [900, 902, 903, 904, 905, 906, 908, 909, 950, 951, 953, 960, 961, 962, 963, 964, 965, 966, 967, 968,
-                   969]
+        MTC = [902, 910, 911, 912, 913, 914, 915, 916, 917, 918, 919, 978, 980, 981, 982, 983, 984, 985,
+               986, 987, 988, 989]
+        BEELINE = [903, 905, 906, 908, 909, 960, 961, 962, 963, 964, 965, 966, 967, 968, 969]
         MEGAFON = [920, 921, 922, 923, 924, 925, 926, 927, 928, 929, 930, 931, 932, 933, 934, 936, 937, 938, 939, 999]
         RT = [904, 908, 950, 951, 955, 958, 970, 971, 992]
         T2 = [900, 901, 902, 904, 908, 950, 951, 952, 953, 958, 977, 991, 992, 993, 994, 995, 996, 999]
-        if code in MTC:
+        if code in T2:
+            return 'Tele2'
+        elif code in MTC:
             return 'MTC'
         elif code in BEELINE:
             return 'Beeline'
@@ -831,27 +829,69 @@ def mobile(t, mode='Operator'):
 
 # ----------------------------------------- Getting mobile operator() -------------------------------------
 def get_mobile(data, mode='Operator'):
-    """Special function for cutting father's names"""
+    """Special function for getting mobile operator"""
     tqdm.pandas(desc="Work with MOBILE       ")
-    data['Mobile'] = data['Первые 4 цифры моб телефона'].progress_apply(mobile, mode=mode)
-    data.drop('Первые 4 цифры моб телефона', axis=1, inplace=True)
+    data['Mobile'] = data['Мобильный телефон'].progress_apply(mobile, mode=mode)
+    if not mode == 'Operator':
+        tmp = data.groupby(by='Mobile').size()
+        tmp.sort_values(ascending=False, inplace=True)
+        most_popular = tmp[tmp > 50].index.get_values()
+        data['Mobile'] = data['Mobile'].progress_apply(lambda t: t if (t in most_popular) else '000')
+    data.drop('Мобильный телефон', axis=1, inplace=True)
     return data
 
 
+# ----------------------------------------- Getting email domain() -------------------------------------
+def get_email(data):
+    """Special function for getting clean email domain"""
+    tqdm.pandas(desc="Work with email  ")
+    data['E-mail'] = data['E-mail'].progress_apply(email)
+    tmp = data.groupby(by='E-mail').size()
+    tmp.sort_values(ascending=False, inplace=True)
+    most_popular = tmp[tmp > 30].index.get_values()
+    data['E-mail'] = data['E-mail'].progress_apply(lambda t: t if (t in most_popular) else 'Other')
+    return data
+
+# ----------------------------------------- Getting email domain() -------------------------------------
+def get_bin(data):
+    """Special function for getting clean email domain"""
+    tqdm.pandas(desc="Work with email  ")
+    data['E-mail'] = data['E-mail'].progress_apply(email)
+    tmp = data.groupby(by='E-mail').size()
+    tmp.sort_values(ascending=False, inplace=True)
+    most_popular = tmp[tmp > 30].index.get_values()
+    data['E-mail'] = data['E-mail'].progress_apply(lambda t: t if (t in most_popular) else 'Other')
+    return data
+
 # ----------------------------------------- Print bar of required column -------------------------------------
-def print_bar(data, tmp='Имя', filna=False, head=10, sort=True, vh=False):
+def print_bar(data, tmp='Имя', filna=False, head=10, ascending=False, v=True, h=False, annotate=False, color='Blues_d'):
     mails = data.groupby(by=tmp).size()
     if filna:
         mails.drop('Не указано', inplace=True)
-    if sort:
-        mails.sort_values(ascending=False, inplace=True)
-    plt.figure("Neural network: ", figsize=(10, 6))
-    if vh:
-        plt.subplot(mails.head(head).plot.barh())
-    else:
-        plt.subplot(mails.head(head).plot.bar())
-    plt.tight_layout()
-    plt.show()
+    mails.sort_values(ascending=ascending, inplace=True)
+    sns.set(font_scale=1.3)
+    sns.set_style("whitegrid")
+
+    plt.figure(tmp, figsize=(10, 6))
+    if not os.path.exists('../data/Analysis/Features/'):
+        os.makedirs('../data/Analysis/Features/')
+    if h:
+        plt.subplot(mails.head(head).plot.barh(color=sns.color_palette(color, 5))).invert_yaxis()
+        plt.tight_layout()
+        plt.savefig('../data/Analysis/Features/' + tmp + '_h.png', bbox_inches='tight', dpi=300)
+    elif v:
+        ax = mails.head(head).plot.bar(color=sns.color_palette(color, 5))
+        if annotate:
+            for p in ax.patches:
+                ax.annotate(int(np.round(p.get_height())),
+                            (p.get_x() + p.get_width() / 2., p.get_height()), ha='center', va='center',
+                            xytext=(0, 10), textcoords='offset points')
+        # plt.subplot(mails.head(head).plot.bar(color=sns.color_palette(color, 5)))
+        # my_colors = [(x / 25.0, x / 10.0, 0.85) for x in range(head)]
+        # plt.subplot(mails.head(head).plot.bar(colormap="Blues_d"))
+        # plt.subplot(sns.barplot(mails.head(head), palette="Blues_d"))
+        plt.tight_layout()
+        plt.savefig('../data/Analysis/Features/' + tmp + '.png', bbox_inches='tight', dpi=300)
 
 
 def load_dataset(split_sex=False, split_QType=False, save_categorical=False):
@@ -978,6 +1018,10 @@ def features_fillna_v2(data, fillna=True):
     age_mask = (data['Возраст'].isnull()) & (data['Дата рождения'].notnull())
     tqdm.pandas(desc="Work age  ")
     data['Возраст'][age_mask] = data[age_mask].progress_apply(fix_age, axis=1)
+    # Fix region info
+    tqdm.pandas(desc="Work with REGION       ")
+    region_mask = (data['Субъект федерации'].isnull()) & (data['Город'].notnull())
+    data['Субъект федерации'][region_mask] = data[region_mask].progress_apply(fix_region, axis=1)
     # FillNA for Attraction in work: 1 if some text was typed and 0 otherwise.
     # TODO add bag of words - is it necessary??
     if fillna:
@@ -987,20 +1031,47 @@ def features_fillna_v2(data, fillna=True):
         data['Отчество'].fillna('Не указано', inplace=True)
         data['E-mail'].fillna('Не указано', inplace=True)
         data['Мобильный телефон'].fillna(0, inplace=True)
-        data['Субъект федерации'].fillna('Не указано', inplace=True)
     return data.dropna()
 
 
-def load_data_v2(transform_category='', drop='', fillna=True):
+def load_data_v2(transform_category='', t='Targets', f='Features', drop='',
+                 fillna=True,
+                 add_f=True,
+                 name_modification=True,
+                 emails=True,
+                 mob=True,
+                 zero=False,
+                 all=False, use_private=False, clean_target=False):
     """Loading data from steady CSV-files"""
     # Loading from steady-files:
-    types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64}
-    def_drop = ['Сотрудник', 'Субъект федерации']
+    types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64, 'BIN': np.int64, 'Мобильный телефон': np.int64}
+    def_drop = ['Сотрудник', 'ID (автономер в базе)', 'Фамилия', 'Дата рождения', 'BIN']
     if not drop == '':
         def_drop.extend(drop)
     titles = ['ID (автономер в базе)', 'Сотрудник', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Город', 'Дата рождения',
               'Возраст', 'Субъект федерации', 'E-mail', 'Гражданство', 'Алкоголь', 'Аллергические реакции',
-              'Мобильный телефон']
+              'Мобильный телефон', 'BIN']
+    t_titles = ['ID (автономер в базе)', 'QTotal', 'QTotalCalcType', 'Статус смены (Смена)', 'Явка на смене (Смена)',
+                'Тип биллинга']
+    private = ['Серия паспорта', 'Номер паспорта', 'Дата выдачи']
+    if use_private:
+        titles.extend(private)
+    if zero:
+        fillna = False
+        add_f = False
+        name_modification = False
+        emails = False
+        mob = False
+        titles = ['ID (автономер в базе)', 'Сотрудник', 'Пол', 'Фамилия', 'Город', 'Дата рождения',
+                  'Возраст', 'Субъект федерации', 'E-mail', 'Гражданство', 'Алкоголь', 'Аллергические реакции',
+                  'Мобильный телефон', 'BIN']
+
+    if all:
+        fillna = True
+        add_f = True
+        name_modification = True
+        emails = True
+        mob = True
     # 'Мобильный телефон',]
     # ['ID (автономер в базе)', 'Сотрудник', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Город', 'Дата рождения', 'Возраст',
     # 'Мобильный телефон', 'Серия паспорта', 'Номер паспорта', 'Рабочий статус сотрудника (нов)',
@@ -1009,12 +1080,17 @@ def load_data_v2(transform_category='', drop='', fillna=True):
     # 'Гражданство', 'Дата выдачи', 'Дети', 'Есть основная работа', 'Источник', 'Курение',
     # 'Опыт проведения инвентаризаций', 'Предпочтительны смены', 'Причина состояния', 'ПСС', 'ПСС Сдан (Да/Нет)',
     # 'Семейное положение', 'Состояние', 'Хронические заболевания', 'QualityRatioTotal']
-    data_features = pd.read_csv('../data/FULL/Features.csv', delimiter=';')[titles]
+    data_features = pd.read_csv('../data/FULL/' + f + '.csv', delimiter=';', dtype=types)[titles]
     # print(data_features.info())
     print("Features: ", data_features.shape)
-    # missing_data(data_features)
-    data_target = binarize_target(pd.read_csv('../data/FULL/Targets.csv', delimiter=';', dtype=types))
-
+    data_target = binarize_target(pd.read_csv('../data/FULL/' + t + '.csv', delimiter=';', dtype=types)[t_titles])
+    if clean_target:
+        grouped = data_target.groupby(by='ID (автономер в базе)')
+        data_target = grouped.aggregate(np.sum)
+        data_target['Size'] = data_target['QualityRatioTotal'].apply(np.absolute)
+        data_target['QualityRatioTotal'] = data_target['QualityRatioTotal'].apply(np.sign)
+        data_target = data_target.drop(data_target[data_target['QualityRatioTotal'] == 0].index)
+        data_target.reset_index(level=0, inplace=True)
     # print(data_target.info())
     print("Target: ", data_target.shape)
     # Merge 2 parts of data to one DataFrame
@@ -1023,28 +1099,37 @@ def load_data_v2(transform_category='', drop='', fillna=True):
     print(list(data))
     print("Merged: ", data.shape)
     # missing_data(data, plot=True)
-    data = features_fillna_v2(data, fillna=fillna)
-    print("FillNA: ", data.shape)
+    # ----------------------------------- Munging Data ------------------------
+    if fillna:
+        data = features_fillna_v2(data, fillna=fillna)
+        print("FillNA: ", data.shape)
     #
     # Munging data
-    data = add_features(data)
+    if add_f:
+        data = add_features(data)
     # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
-    drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
-    data.drop(drop_titles, axis=1, inplace=True)
+
+
     # ---- NAMES ----
-    data = modify_names(data)
+    # print(data)
+    # if name_modification:
+    # data = modify_names(data)
     # ---- Email ----
-    tqdm.pandas(desc="Work with email  ")
-    data['E-mail'] = data['E-mail'].progress_apply(email)
+    if emails:
+        data = get_email(data)
     # ---- Add MOBILE ----
-    tqdm.pandas(desc="Work with MOBILE       ")
-    data['Mobile'] = data['Мобильный телефон'].progress_apply(mobile)
-    data.drop('Мобильный телефон', axis=1, inplace=True)
+    if mob:
+        # tqdm.pandas(desc="Work with MOBILE       ")
+        # data['Mobile'] = data['Мобильный телефон'].progress_apply(mobile, mode='N')
+        # data.drop('Мобильный телефон', axis=1, inplace=True)
+        data = get_mobile(data, mode='Operator')
     #
     # Drop required columns:
     if not def_drop == '':
         data.drop(def_drop, axis=1, inplace=True)
-    print(data)
+    if zero:
+        data.fillna(0, inplace=True)
+    # print(data)
     # ---- Categorical ----
     categorical_titles = list(data.select_dtypes(exclude=[np.number]))
     print(categorical_titles)
@@ -1054,26 +1139,16 @@ def load_data_v2(transform_category='', drop='', fillna=True):
     t_t = list(data)
     t_t.remove('QualityRatioTotal')
     X = data[t_t]
-    Y = data[list(data_target)[1:]]
+    Y = data[list(data_target)[1:2]]
     return X, Y, work_titles
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
-def test_logistic_v2(drop='', scoring='roc_auc', title='', selectK='', fillna=True):
+def test_zero(drop='', scoring='roc_auc', title='', selectK='', fillna=True, t='Targets', f='FeaturesBIN2'):
     """Testing linear method for train"""
-    train_data, train_target, work_titles = load_data_v2(transform_category='OneHot', drop=drop, fillna=fillna)
-    # if not selectK == '':
-    #     print(train_data.shape)
-    #     train_data_new = SelectKBest(chi2, k=selectK).fit_transform(train_data, train_target)
-    #     print(train_data_new.shape)
-    #     scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-    #     rescaledData = pd.DataFrame(scaler.fit_transform(train_data_new),
-    #                                 index=train_data.index)
-    # else:
-    #     scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-    #     rescaledData = pd.DataFrame(scaler.fit_transform(train_data.values),
-    #                                 index=train_data.index,
-    #                                 columns=train_data.columns)
+    train_data, train_target, work_titles = load_data_v2(transform_category='OneHot', t='Targets2016', f='FeaturesBIN2',
+                                                         zero=True)
+
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
@@ -1109,6 +1184,8 @@ def test_logistic_v2(drop='', scoring='roc_auc', title='', selectK='', fillna=Tr
     print("Score is ", score_best, ' with scoring=', scoring)
     print("Time elapsed: ", time_best)
     # Draw and save plot
+    sns.set(font_scale=2)
+    # TODO change all plotting to SEABORN
     plt.rcParams.update({'font.size': 22})
     fig = plt.figure("Logistic regression: ", figsize=(16, 12))
     fig.suptitle('Logistic regression  ' + str(score_best), fontweight='bold')
@@ -1118,6 +1195,281 @@ def test_logistic_v2(drop='', scoring='roc_auc', title='', selectK='', fillna=Tr
     ax.set_xlabel('log(C), ' + scoring)
     ax.plot(_range, quality, 'g', linewidth=2)
     ax.grid(True)
-    if not os.path.exists('../data/plots/Models/LogisticRegression/'):
-        os.makedirs('../data/plots/Models/LogisticRegression/')
-    plt.savefig('../data/plots/Models/LogisticRegression/' + title + datetime.now().strftime('%m%d_%H%M') + '.png')
+    if not os.path.exists('../data/plots/Models/Zero/'):
+        os.makedirs('../data/plots/Models/Zero/')
+    plt.savefig('../data/plots/Models/Zero/' + title + datetime.now().strftime('%m%d_%H%M') + '.png')
+
+
+# ----------------------------------------- Test Logistic Regression  -------------------------------------
+def test_logistic_v2(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN2',
+                     t='Targets2016'):
+    """Testing linear method for train"""
+    train_data, train_target, work_titles = load_data_v2(transform_category='OneHot', drop=drop, fillna=fillna,
+                                                         f=f, t=t, all=True)
+    if not selectK == '':
+        print(train_data.shape)
+        train_data_new = SelectKBest(chi2, k=selectK).fit_transform(train_data, train_target)
+        print(train_data_new.shape)
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data = pd.DataFrame(scaler.fit_transform(train_data_new),
+                                  index=train_data.index)
+    else:
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                  index=train_data.index,
+                                  columns=train_data.columns)
+    # KFold for splitting
+    cv = KFold(n_splits=5,
+               shuffle=True,
+               random_state=241)
+
+    quality = []
+    time = []
+    _range = np.arange(-4, 2)
+    C = np.power(10.0, _range)
+    for c in C:
+        start = timer()
+        lr = linear_model.LogisticRegression(C=c,
+                                             random_state=241,
+                                             n_jobs=-1)
+        scores = cross_val_score(lr, train_data, train_target['QualityRatioTotal'],
+                                 cv=cv, scoring=scoring,
+                                 n_jobs=-1)
+        score = np.mean(scores)
+        quality.append(score)
+        tt = timer() - start
+        time.append(tt)
+        print("C parameter is " + str(c))
+        print("Score is ", score)
+        print("Time elapsed: ", tt)
+        print("""-----------¯\_(ツ)_/¯ -----------""")
+
+        # Draw it:
+    score_best = max(quality)
+    idx = quality.index(score_best)
+    C_best = C[idx]
+    time_best = time[idx]
+    print("Наилучший результат достигается при C=" + str(C_best))
+    print("Score is ", score_best, ' with scoring=', scoring)
+    print("Time elapsed: ", time_best)
+    # Draw and save plot
+    sns.set(font_scale=2)
+    plt.rcParams.update({'font.size': 22})
+    fig = plt.figure("Logistic regression: ", figsize=(16, 12))
+    fig.suptitle('Logistic regression  ' + str(score_best), fontweight='bold')
+    ax = fig.add_subplot(111)
+    ax.set_title(str(work_titles), fontdict={'fontsize': 10})
+    ax.set_ylabel('Score')
+    ax.set_xlabel('log(C), ' + scoring)
+    ax.plot(_range, quality, 'g', linewidth=2)
+    ax.grid(True)
+    if not os.path.exists('../data/plots/Models/LogisticRegression/' + fea + '/'):
+        os.makedirs('../data/plots/Models/LogisticRegression/' + fea + '/')
+    plt.savefig('../data/plots/Models/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
+        '%m%d_%H%M') + '.png')
+
+
+# ----------------------------------------- Print statistic of DataFrame -------------------------------------
+def data_stat(data, plot=False, name='Features', ):
+    counts = data.describe(include='all').loc[:'top'].T.sort_values(by='count', ascending=False)
+    if plot:
+        # plt.figure("Data Analysis: ", figsize=(10, 6))
+        plt.subplot(counts.head(25).plot.barh())
+        plt.tight_layout()
+        plt.show()
+    print(counts)
+    counts.to_excel(name + '.xlsx')
+    return counts
+
+
+# ----------------------------------------- Print bar of required column -------------------------------------
+def get_bottom(data, tmp='Имя', head=10):
+    mails = data.groupby(by=tmp).size()
+    mails.sort_values(ascending=True, inplace=True)
+    cnt = []
+    for it in range(0, head):
+        cnt.append(mails[mails > it].size)
+    print(cnt)
+    fig = plt.figure(tmp, figsize=(15, 6))
+    sns.set(font_scale=2)
+    sns.set_style("whitegrid")
+    if not os.path.exists('../data/Analysis/Features/Bottom'):
+        os.makedirs('../data/Analysis/Features/Bottom')
+    ax = fig.add_subplot(111)
+    # ax.set_title(tmp, fontdict={'fontsize': 20})
+    ax.set_ylabel('N', rotation=0, labelpad=50)
+    ax.set_xlabel('Уровень отсечения', labelpad=10)
+    ax.plot(range(1, head + 1), cnt, linewidth=3)
+    plt.tight_layout()
+    plt.savefig('../data/Analysis/Features/Bottom/' + tmp + '.png', bbox_inches='tight', dpi=300)
+
+
+# ----------------------------------------- Fix Region) -------------------------------------
+def fix_region(row):
+    """Function for find region info from city column if it's possible"""
+    s = row['Город']
+    tmp = {'Тюмень': 'Тюменская область',
+           'Пермь': 'Пермский край',
+           'Лысьва': 'Пермский край',
+           'Краснокамс': 'Пермский край',
+           'Кыштым': 'Челябинская область',
+           'Лазаревское': 'Краснодарский край',
+           'Новокубанск': 'Краснодарский край',
+           'Крымск': 'Краснодарский край',
+           'Новоалтайск': 'Алтайский край',
+           'Нягань': 'Ханты-Мансийский автономный округ - Югра',
+           'Нижневартовск': 'Ханты-Мансийский автономный округ - Югра',
+           'Белорецк': 'Республика Башкортостан',
+           'Нефтекамск': 'Республика Башкортостан',
+           'Маркс': 'Саратовская область',
+           'Боровичи': 'Новгородская область',
+           'Бердск': 'Новосибирская область',
+           'Ангарск': 'Иркутская область',
+           'Новый Уренгой': 'Ханты-Мансийский автономный округ - Югра',
+           'Югорск': 'Ханты-Мансийский автономный округ - Югра',
+           'Елец': 'Липецкая область',
+           'Симферополь': 'Республика Крым',
+           'Усинск': 'Респеблика Коми',
+           'Орел': 'Орловская область',
+           'Канск': 'Красноярский край',
+           'Ачинск': 'Красноярский край',
+           'Сибай': 'Республика Башкортостан',
+           'Асбест': 'Свердловская область',
+           'Лиски': 'Воронежская область',
+           'Санкт-Петербург': 'Ленинградская область (Санкт-Петербург)',
+           'Курск': 'Курская область',
+           'Нижний Новгород': 'Нижегородская область',
+           'Тамбов': 'Тамбовская область',
+           'Челябинск': 'Челябинская область',
+           'Смоленская обл.': 'Смоленская область',
+           'Красноярский Край': 'Красноярский край'}
+    if s.find("(") == -1:
+        if s in tmp.keys():
+            region = tmp[s]
+        else:
+            region = 'Не указан'
+    else:
+        region = s[s.find("(") + 1:s.find(")")]
+        if region in tmp.keys():
+            region = tmp[region]
+    return region[:1].upper() + region[1:]
+
+
+# ----------------------------------------- Features fillNA ----------------------------------------------------
+def data_analysis(transform_category='', drop='', fillna=True, t='Targets', f='FeaturesBIN2', use_private=False):
+    """Loading data from steady CSV-files"""
+    # Loading from steady-files:
+    types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64, 'BIN': np.int64, 'Мобильный телефон': np.int64}
+    def_drop = ['Сотрудник']
+    if not drop == '':
+        def_drop.extend(drop)
+    titles = ['ID (автономер в базе)', 'Сотрудник', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Город', 'Дата рождения',
+              'Возраст', 'Субъект федерации', 'E-mail', 'Гражданство', 'Источник',
+              'Мобильный телефон', 'Есть основная работа', 'BIN']
+    t_titles = ['ID (автономер в базе)', 'QTotal', 'QTotalCalcType', 'Статус смены (Смена)', 'Явка на смене (Смена)',
+                'Тип биллинга']
+    private = ['Серия паспорта', 'Номер паспорта', 'Дата выдачи']
+    if use_private:
+        titles.extend(private)
+    # 'Мобильный телефон',]
+    # ['ID (автономер в базе)', 'Сотрудник', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Город', 'Дата рождения', 'Возраст',
+    # 'Мобильный телефон', 'Серия паспорта', 'Номер паспорта', 'Рабочий статус сотрудника (нов)',
+    # 'Уровень квалификации', 'Квалификация', 'Город.1', 'Страна', 'Субъект федерации', 'E-mail',
+    # 'Адрес прописки совпадает с адресом проживания', 'Алкоголь', 'Аллергические реакции', 'Ближ.метро', 'Выдан',
+    # 'Гражданство', 'Дата выдачи', 'Дети', 'Есть основная работа', 'Источник', 'Курение',
+    # 'Опыт проведения инвентаризаций', 'Предпочтительны смены', 'Причина состояния', 'ПСС', 'ПСС Сдан (Да/Нет)',
+    # 'Семейное положение', 'Состояние', 'Хронические заболевания', 'QualityRatioTotal']
+    data_features = pd.read_csv('../data/FULL/' + f + '.csv', delimiter=';', dtype=types)[titles]
+    print("Features: ", data_features.shape)
+    # Drop required columns:
+    if not def_drop == '':
+        data_features.drop(def_drop, axis=1, inplace=True)
+    t_print = list(data_features)
+    t_print.remove('ID (автономер в базе)')
+    data_features = features_fillna_v2(data_features, fillna=fillna)
+    print("FillNA: ", data_features.shape)
+    data_features = get_mobile(data_features, mode='Operator')
+    # --- Mobile ---
+    print_bar(data_features, tmp='Mobile', annotate=True)
+    # --- E-mail ---
+    data_features = get_email(data_features)
+    tmp = data_features.groupby(by='E-mail').size()
+    tmp.sort_values(ascending=False, inplace=True)
+    print(data_features['BIN'])
+
+
+    # for it in t_print:
+    #     get_bottom(data_features, tmp=it)
+
+    # data_stat(data_features, name='BIN')
+    # for it in t_print:
+    #     print_bar(data_features, tmp=it)
+
+    # print(data_features.describe(include='all'))
+    # stat = data_stat(data_features, name='Features')
+    # data_target = pd.read_csv('../data/FULL/' + t + '.csv', delimiter=';', dtype=types)[t_titles]
+
+    # ----------- TARGET ----------
+    # data_target = binarize_target(pd.read_csv('../data/FULL/'+t+'.csv', delimiter=';', dtype=types)[t_titles])
+    # grouped = data_target.groupby(by='ID (автономер в базе)')
+    # print(grouped.size())
+    # # print(grouped.get_group(1102))
+    # data_target = grouped.aggregate(np.sum)
+    # # data_target['Size'] = grouped.size()
+    # data_target['Size'] = data_target['QualityRatioTotal'].apply(np.absolute)
+    # data_target['QualityRatioTotal'] = data_target['QualityRatioTotal'].apply(np.sign)
+    # print(data_target.shape)
+    # data_target = data_target.drop(data_target[data_target['QualityRatioTotal']==0].index)
+    # print(data_target.shape)
+    # data_target.reset_index(level=0, inplace=True)
+    # print(data_target)
+
+    # for name, group in grouped:
+    #     print(name, '\n----')
+    #     print(group)
+    # print("Target: ", data_target.shape)
+
+    # # Merge 2 parts of data to one DataFrame
+    # data = data_features.merge(data_target,
+    #                            on='ID (автономер в базе)')
+    # print("Merged: ", data.shape)
+    # print(data)
+    # print_bar(data, tmp='BIN')
+    # missing_data(data)
+    # # missing_data(data, plot=True)
+
+    # data = features_fillna_v2(data, fillna=fillna)
+    # print("FillNA: ", data.shape)
+    # stat = data_stat(data, name='FillNA')
+
+    # #
+    # # Munging data
+    # data = add_features(data)
+    # # drop_titles = ['ID (автономер в базе)', 'Имя', 'Отчество', 'Фамилия', 'Дата рождения']
+    # drop_titles = ['ID (автономер в базе)', 'Фамилия', 'Дата рождения']
+    # data.drop(drop_titles, axis=1, inplace=True)
+    # # ---- NAMES ----
+    # data = modify_names(data)
+    # # ---- Email ----
+    # tqdm.pandas(desc="Work with email  ")
+    # data['E-mail'] = data['E-mail'].progress_apply(email)
+    # # ---- Add MOBILE ----
+    # tqdm.pandas(desc="Work with MOBILE       ")
+    # data['Mobile'] = data['Мобильный телефон'].progress_apply(mobile)
+    # data.drop('Мобильный телефон', axis=1, inplace=True)
+    # #
+    # # Drop required columns:
+    # if not def_drop == '':
+    #     data.drop(def_drop, axis=1, inplace=True)
+    # print(data)
+    # # ---- Categorical ----
+    # categorical_titles = list(data.select_dtypes(exclude=[np.number]))
+    # print(categorical_titles)
+    # work_titles = list(data)
+    # if transform_category in ['OneHot', 'LabelsEncode']:
+    #     data = category_encode(data, titles=categorical_titles, mode=transform_category)
+    # t_t = list(data)
+    # t_t.remove('QualityRatioTotal')
+    # X = data[t_t]
+    # Y = data[list(data_target)[1:]]
+    # return X, Y, work_titles
