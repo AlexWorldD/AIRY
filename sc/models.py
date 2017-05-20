@@ -9,8 +9,17 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, roc_auc_score
 from sklearn.model_selection import train_test_split
+from tqdm import tnrange, tqdm_notebook
+
+
+def f_measure(p1, p2, alpha=0.5):
+    return 1 / (alpha * (1 / p1) + (1 - alpha) * (1 / p2))
+
+
+def f_measure2(p1, p2, alpha=0.5):
+    return alpha * p1 + (1 - alpha) * p2
 
 
 def thin_data(data, dict={'Имя': 1, 'Отчество': 2}):
@@ -310,7 +319,7 @@ def LR(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=Tru
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
-          t='Targets2016', required='', cut=False):
+          t='Targets2016', required='', cut=False, no_plot=False):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='OneHot', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True, thin_names=cut)
@@ -377,25 +386,28 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
     X_test, y_test = split_data(prepare_test_set(X_test))
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
-    y_predict = lr.fit(train_data_new, train_target).decision_function(X_test)
-    fpr, tpr, thresholds = roc_curve(y_test, y_predict)
-    plt.figure()
-    lw = 2
-    plt.plot(fpr, tpr, color='darkorange',
-             lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
-    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic +' + title)
-    plt.legend(loc="lower right")
-    if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
-        os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
-    plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
-        '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
-    tt = timer() - start
-    return auc(fpr, tpr)
+    y_predict = pd.DataFrame(lr.fit(train_data_new, train_target).predict_proba(X_test))
+    y_predict = np.array(y_predict[1])
+    print(y_predict)
+    if not no_plot:
+        fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+        plt.figure()
+        lw = 2
+        plt.plot(fpr, tpr, color='darkorange',
+                 lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver operating characteristic +' + title)
+        plt.legend(loc="lower right")
+        if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
+            os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
+        plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
+            '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+        tt = timer() - start
+    return y_test, y_predict
 
     print("C parameter is " + str(C))
     print("Score is ", scores.mean())
@@ -417,6 +429,25 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
         os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
     plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
         '%d_%H%M') + '.png')
+
+
+def roc_score(y_test, y_predict, title='', fea='Complex'):
+    fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+    plt.figure()
+    lw = 2
+    plt.plot(fpr, tpr, color='darkorange',
+             lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic +' + title)
+    plt.legend(loc="lower right")
+    if not os.path.exists('../data/Results/' + fea + '/'):
+        os.makedirs('../data/Results/' + fea + '/')
+    plt.savefig('../data/Results/' + fea + '/' + title + '_' + datetime.now().strftime(
+        '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
 
 
 # ----------------------------------------- Transform all categorical features to vectors  -----------------------------
@@ -549,9 +580,10 @@ def different_features():
     plt.savefig('../data/Results/LogisticRegression/Comparing_' + datetime.now().strftime(
         '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
 
+
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def RF(drop='', est=5000, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
-          t='Targets2016', required='', cut=False):
+       t='Targets2016', required='', cut=False, no_plot=False):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True)
@@ -594,24 +626,25 @@ def RF(drop='', est=5000, fea='', scoring='roc_auc', title='', selectK='', filln
     y_predict = pd.DataFrame(rf.fit(train_data_new, train_target).predict_proba(X_test))
     y_predict = np.array(y_predict[1])
     print(y_predict)
-    fpr, tpr, thresholds = roc_curve(y_test, y_predict)
-    plt.figure()
-    lw = 2
-    plt.plot(fpr, tpr, color='darkorange',
-             lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
-    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic +' + title)
-    plt.legend(loc="lower right")
-    if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
-        os.makedirs('../data/Results/RandomForest/' + fea + '/')
-    plt.savefig('../data/Results/RandomForest/' + fea + '/' + title + '_' + datetime.now().strftime(
-        '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+    if not no_plot:
+        fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+        plt.figure()
+        lw = 2
+        plt.plot(fpr, tpr, color='darkorange',
+                 lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver operating characteristic +' + title)
+        plt.legend(loc="lower right")
+        if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
+            os.makedirs('../data/Results/RandomForest/' + fea + '/')
+        plt.savefig('../data/Results/RandomForest/' + fea + '/' + title + '_' + datetime.now().strftime(
+            '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
     tt = timer() - start
-    return auc(fpr, tpr)
+    return y_predict, y_test
 
     print("C parameter is " + str(C))
     print("Score is ", scores.mean())
@@ -634,3 +667,22 @@ def RF(drop='', est=5000, fea='', scoring='roc_auc', title='', selectK='', filln
     plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
         '%d_%H%M') + '.png')
 
+
+def find_alpha():
+    p1 = np.load('Results/predicted1.npy')
+    p2 = np.load('Results/predicted2.npy')
+    y1 = np.load('Results/y1.npy')
+    y2 = np.load('Results/y2.npy')
+    complex = []
+    st = 0.3
+    for a in trange(30, desc='Searching best alpha'):
+        st = 0.3 + a / 50
+        res = roc_auc_score(y1, f_measure2(p1, p2, alpha=st))
+        complex.append(res)
+        print(res)
+    score_best = max(complex)
+    idx = complex.index(score_best)
+    alpha = np.linspace(0.3, 0.9, num=30)[idx]
+    print('Best score: AUC ROC=' + str(score_best))
+    print('Alpha: ', str(alpha))
+    roc_score(y1, f_measure2(p1, p2, alpha=alpha))

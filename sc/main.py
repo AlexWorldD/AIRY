@@ -6,6 +6,7 @@ import os
 from tqdm import tqdm, tqdm_pandas
 from custom_functions import *
 from models import *
+from sklearn.metrics import roc_auc_score
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn import linear_model
 from sklearn.preprocessing import StandardScaler
@@ -17,9 +18,19 @@ from sklearn.feature_selection import chi2
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 import seaborn as sns
+from tqdm import tnrange, tqdm_notebook
 
 # As CONST_VAR for linking features and target
 ID = 'ID (автономер в базе)'
+
+
+def f_measure(p1, p2, alpha=0.5):
+    return 1 / (alpha * (1 / p1) + (1 - alpha) * (1 / p2))
+
+
+def f_measure2(p1, p2, alpha=0.5):
+    return alpha * p1 + (1 - alpha) * p2
+
 
 if __name__ == '__main__':
     start = timer()
@@ -47,8 +58,15 @@ if __name__ == '__main__':
     # test_LR(scoring='f1', title='f1')
     titles = ['E-mail', 'Гражданство',
               'Mobile', 'Zodiac', 'DayOfBirth', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество', 'Город']
+
+    # find_alpha()
     # LR_v2(title='NewVersionBEST', cut=True, selectK='best')
-    RF(selectK='best', title='5kTrees')
+    predicted1, y1 = LR_v2(title='NewVersionBEST', cut=True, selectK='best', no_plot=True)
+    # predicted2, y2 = RF(selectK='best', title='5kTrees', no_plot=True)
+    # np.save('Results/predicted1.npy', predicted1)
+    # np.save('Results/predicted2.npy', predicted2)
+    # np.save('Results/y1.npy', y1)
+    # np.save('Results/y2.npy', y2)
     # t_t = list(train_data_new)
     # t_t.remove('QualityRatioTotal')
     # grouped = train_data_new.groupby(t_t, as_index=False)
