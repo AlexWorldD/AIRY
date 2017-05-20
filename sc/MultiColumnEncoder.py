@@ -1,6 +1,7 @@
 from sklearn.base import BaseEstimator, TransformerMixin
-import pandas as pd
+import numpy as np
 from sklearn.preprocessing import LabelEncoder
+
 
 class EncodeCategorical(BaseEstimator, TransformerMixin):
     """
@@ -8,7 +9,7 @@ class EncodeCategorical(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, columns=None):
-        self.columns  = columns
+        self.columns = columns
         self.encoders = None
 
     def fit(self, data, target=None):
@@ -25,6 +26,26 @@ class EncodeCategorical(BaseEstimator, TransformerMixin):
             for column in self.columns
         }
         return self
+
+    def export(self):
+        """
+        Uses for export encoders.
+        """
+        np.save('LabelEncoding/Columns.npy', self.columns)
+        for name in self.columns:
+            np.save('LabelEncoding/' + name + '.npy', self.encoders[name].classes_)
+
+    def set(self):
+        """
+        Uses for import encoders for prediction set.
+        """
+        self.columns = np.load('LabelEncoding/Columns.npy')
+        self.encoders = {
+            column: LabelEncoder()
+            for column in self.columns
+        }
+        for name in self.columns:
+            self.encoders[name].classes_ = np.load('LabelEncoding/' + name + '.npy')
 
     def transform(self, data):
         """

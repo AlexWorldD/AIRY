@@ -14,11 +14,10 @@ from sklearn import linear_model
 from sklearn.neural_network import MLPClassifier
 import os
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_extraction import DictVectorizer
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.feature_extraction import DictVectorizer, FeatureHasher
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 from sklearn import preprocessing
-from sklearn.feature_selection import SelectKBest, SelectFromModel
-from sklearn.feature_selection import chi2
+
 import MultiColumnEncoder
 
 # Disable SettingWithCopyWarning
@@ -187,6 +186,8 @@ def add_features(data, split_bd=True, zodiac_sign=True):
     if zodiac_sign:
         tqdm.pandas(desc="Getting zodiac sign   ")
         data['Zodiac'] = data['Дата рождения'].progress_apply(zodiac)
+    data.drop('Дата рождения', axis=1, inplace=True)
+    data['Возраст'] = data['Возраст'].astype(np.int16)
     # tqdm.pandas(desc="Binarize work info    ")
     # data['Есть основная работа'] = data['Есть основная работа'].progress_apply(lambda x: 1 if x == 'Да' else 0)
     return data
@@ -196,10 +197,16 @@ def add_features(data, split_bd=True, zodiac_sign=True):
 def category_encode(data, titles=['Имя', 'Отчество', 'Пол', 'Дети', 'Семейное положение'], mode='OneHot'):
     # Work with categorical features such as Name
     # TODO change to OneHotEncoder for test data transformation. - is it necessary??
+
     if mode == 'OneHot':
-        data = pd.get_dummies(data, columns=titles, sparse=False)
+        data = pd.get_dummies(data, columns=titles)
     elif mode == 'LabelsEncode':
-        data = MultiColumnEncoder.EncodeCategorical(columns=titles).fit_transform(data)
+        le = MultiColumnEncoder.EncodeCategorical(columns=titles).fit(data)
+        le.export()
+        data = le.transform(data)
+    elif mode=='Hash':
+        mode
+        # TODO
     return data
 
 
@@ -279,11 +286,11 @@ def binary_quality_ratio(row, alpha=0.7, mode='QTotal'):
                     if row[required_title] >= alpha:
                         return 1
                     else:
-                        return -1
+                        return 0
         elif row['Статус смены (Смена)'] == 'Подтвержден':
-            return -1
+            return 0
     elif row['Тип биллинга'] == 'Штрафной':
-        return -1
+        return 0
 
 
 # ----------------------------------------- Modify target data -------------------------------------
@@ -771,7 +778,7 @@ def patronymic(t):
     t = t.lower()
     if t[-4:] in ['ович', 'евич', 'овна', 'евна']:
         return t[:-4]
-    elif t[-1:] in ['-', '0', '6', '7']:
+    elif t[-1:] in ['-', '0', '6', '7', '_', '#'] or t[:1] in ['-', '0', '6', '7', '_', '#']:
         return 'Не указано'
     else:
         return t
@@ -852,19 +859,21 @@ def get_email(data):
     data['E-mail'] = data['E-mail'].progress_apply(lambda t: t if (t in most_popular) else 'Other')
     return data
 
+
 # ----------------------------------------- Getting email domain() -------------------------------------
 def get_bin(data):
     """Special function for getting clean email domain"""
-    tqdm.pandas(desc="Work with email  ")
-    data['E-mail'] = data['E-mail'].progress_apply(email)
+    tqdm.pandas(desc="Work with BIN  ")
+    data['BIN'] = data['E-mail'].progress_apply(email)
     tmp = data.groupby(by='E-mail').size()
     tmp.sort_values(ascending=False, inplace=True)
     most_popular = tmp[tmp > 30].index.get_values()
     data['E-mail'] = data['E-mail'].progress_apply(lambda t: t if (t in most_popular) else 'Other')
     return data
 
+
 # ----------------------------------------- Print bar of required column -------------------------------------
-def print_bar(data, tmp='Имя', filna=False, head=10, ascending=False, v=True, h=False, annotate=False, color='Blues_d'):
+def print_bar(data, tmp='Имя', ver='', filna=False, head=10, ascending=False, v=True, h=False, annotate=False, color='Blues_d'):
     mails = data.groupby(by=tmp).size()
     if filna:
         mails.drop('Не указано', inplace=True)
@@ -872,13 +881,13 @@ def print_bar(data, tmp='Имя', filna=False, head=10, ascending=False, v=True,
     sns.set(font_scale=1.3)
     sns.set_style("whitegrid")
 
-    plt.figure(tmp, figsize=(10, 6))
+    plt.figure(tmp+ver, figsize=(10, 6))
     if not os.path.exists('../data/Analysis/Features/'):
         os.makedirs('../data/Analysis/Features/')
     if h:
         plt.subplot(mails.head(head).plot.barh(color=sns.color_palette(color, 5))).invert_yaxis()
         plt.tight_layout()
-        plt.savefig('../data/Analysis/Features/' + tmp + '_h.png', bbox_inches='tight', dpi=300)
+        plt.savefig('../data/Analysis/Features/' + tmp + '_h'+ver+'.png', bbox_inches='tight', dpi=300)
     elif v:
         ax = mails.head(head).plot.bar(color=sns.color_palette(color, 5))
         if annotate:
@@ -891,7 +900,7 @@ def print_bar(data, tmp='Имя', filna=False, head=10, ascending=False, v=True,
         # plt.subplot(mails.head(head).plot.bar(colormap="Blues_d"))
         # plt.subplot(sns.barplot(mails.head(head), palette="Blues_d"))
         plt.tight_layout()
-        plt.savefig('../data/Analysis/Features/' + tmp + '.png', bbox_inches='tight', dpi=300)
+        plt.savefig('../data/Analysis/Features/' + tmp + ver+'.png', bbox_inches='tight', dpi=300)
 
 
 def load_dataset(split_sex=False, split_QType=False, save_categorical=False):
@@ -1017,11 +1026,13 @@ def features_fillna_v2(data, fillna=True):
     # TODO add conversion from age column to integer - is it necessary??
     age_mask = (data['Возраст'].isnull()) & (data['Дата рождения'].notnull())
     tqdm.pandas(desc="Work age  ")
-    data['Возраст'][age_mask] = data[age_mask].progress_apply(fix_age, axis=1)
+    if not age_mask.sum() == 0:
+        data['Возраст'][age_mask] = data[age_mask].progress_apply(fix_age, axis=1)
     # Fix region info
     tqdm.pandas(desc="Work with REGION       ")
     region_mask = (data['Субъект федерации'].isnull()) & (data['Город'].notnull())
-    data['Субъект федерации'][region_mask] = data[region_mask].progress_apply(fix_region, axis=1)
+    if not region_mask.sum() == 0:
+        data['Субъект федерации'][region_mask] = data[region_mask].progress_apply(fix_region, axis=1)
     # FillNA for Attraction in work: 1 if some text was typed and 0 otherwise.
     # TODO add bag of words - is it necessary??
     if fillna:
@@ -1045,15 +1056,15 @@ def load_data_v2(transform_category='', t='Targets', f='Features', drop='',
     """Loading data from steady CSV-files"""
     # Loading from steady-files:
     types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64, 'BIN': np.int64, 'Мобильный телефон': np.int64}
-    def_drop = ['Сотрудник', 'ID (автономер в базе)', 'Фамилия', 'Дата рождения', 'BIN']
+    def_drop = ['Сотрудник', 'ID (автономер в базе)', 'Фамилия', 'Дата рождения']
     if not drop == '':
         def_drop.extend(drop)
     titles = ['ID (автономер в базе)', 'Сотрудник', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Город', 'Дата рождения',
               'Возраст', 'Субъект федерации', 'E-mail', 'Гражданство', 'Алкоголь', 'Аллергические реакции',
-              'Мобильный телефон', 'BIN']
+              'Мобильный телефон']
     t_titles = ['ID (автономер в базе)', 'QTotal', 'QTotalCalcType', 'Статус смены (Смена)', 'Явка на смене (Смена)',
                 'Тип биллинга']
-    private = ['Серия паспорта', 'Номер паспорта', 'Дата выдачи']
+    private = ['Серия паспорта', 'Номер паспорта', 'Дата выдачи', 'BIN']
     if use_private:
         titles.extend(private)
     if zero:
@@ -1123,7 +1134,6 @@ def load_data_v2(transform_category='', t='Targets', f='Features', drop='',
         # data['Mobile'] = data['Мобильный телефон'].progress_apply(mobile, mode='N')
         # data.drop('Мобильный телефон', axis=1, inplace=True)
         data = get_mobile(data, mode='Operator')
-    #
     # Drop required columns:
     if not def_drop == '':
         data.drop(def_drop, axis=1, inplace=True)
@@ -1131,11 +1141,15 @@ def load_data_v2(transform_category='', t='Targets', f='Features', drop='',
         data.fillna(0, inplace=True)
     # print(data)
     # ---- Categorical ----
+    data = thin(data)
     categorical_titles = list(data.select_dtypes(exclude=[np.number]))
     print(categorical_titles)
+    for it in categorical_titles:
+        data[it] = data[it].astype('category')
     work_titles = list(data)
     if transform_category in ['OneHot', 'LabelsEncode']:
         data = category_encode(data, titles=categorical_titles, mode=transform_category)
+    print('Categorical: ', data.shape)
     t_t = list(data)
     t_t.remove('QualityRatioTotal')
     X = data[t_t]
@@ -1201,23 +1215,30 @@ def test_zero(drop='', scoring='roc_auc', title='', selectK='', fillna=True, t='
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
-def test_logistic_v2(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN2',
+def test_logistic_v2(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
                      t='Targets2016'):
     """Testing linear method for train"""
     train_data, train_target, work_titles = load_data_v2(transform_category='OneHot', drop=drop, fillna=fillna,
                                                          f=f, t=t, all=True)
-    if not selectK == '':
+    fnd = False
+    if selectK == 'best':
+        fnd = True
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data = pd.DataFrame(scaler.fit_transform(train_data),
+                                  index=train_data.index)
+        print('Features from model..')
+    elif not selectK == '':
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data = pd.DataFrame(scaler.fit_transform(train_data),
+                                  index=train_data.index)
         print(train_data.shape)
         train_data_new = SelectKBest(chi2, k=selectK).fit_transform(train_data, train_target)
         print(train_data_new.shape)
-        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-        train_data = pd.DataFrame(scaler.fit_transform(train_data_new),
-                                  index=train_data.index)
     else:
         scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-        train_data = pd.DataFrame(scaler.fit_transform(train_data.values),
-                                  index=train_data.index,
-                                  columns=train_data.columns)
+        train_data_new = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                      index=train_data.index,
+                                      columns=train_data.columns)
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
@@ -1232,7 +1253,11 @@ def test_logistic_v2(drop='', fea='', scoring='roc_auc', title='', selectK='', f
         lr = linear_model.LogisticRegression(C=c,
                                              random_state=241,
                                              n_jobs=-1)
-        scores = cross_val_score(lr, train_data, train_target['QualityRatioTotal'],
+        if fnd:
+            print(train_data.shape)
+            train_data_new = SelectFromModel(lr).fit_transform(train_data, train_target)
+            print(train_data_new.shape)
+        scores = cross_val_score(lr, train_data_new, train_target['QualityRatioTotal'],
                                  cv=cv, scoring=scoring,
                                  n_jobs=-1)
         score = np.mean(scores)
@@ -1355,12 +1380,21 @@ def fix_region(row):
     return region[:1].upper() + region[1:]
 
 
+def thin(data, dict={'Имя': 1, 'Отчество': 2}):
+    for t in dict.keys():
+        tmp = data.groupby(by=t).size()
+        tmp.sort_values(ascending=False, inplace=True)
+        most_popular = tmp[tmp > dict[t]].index.get_values()
+        data[t] = data[t].progress_apply(lambda t: t if (t in most_popular) else 'Редкое')
+    return data
+
+
 # ----------------------------------------- Features fillNA ----------------------------------------------------
-def data_analysis(transform_category='', drop='', fillna=True, t='Targets', f='FeaturesBIN2', use_private=False):
+def data_analysis(transform_category='', drop='', fillna=True, t='Targets', f='FeaturesBIN3', use_private=False):
     """Loading data from steady CSV-files"""
     # Loading from steady-files:
     types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64, 'BIN': np.int64, 'Мобильный телефон': np.int64}
-    def_drop = ['Сотрудник']
+    def_drop = ['Сотрудник', 'ID (автономер в базе)', 'Фамилия', 'Дата рождения', 'Субъект федерации']
     if not drop == '':
         def_drop.extend(drop)
     titles = ['ID (автономер в базе)', 'Сотрудник', 'Фамилия', 'Имя', 'Отчество', 'Пол', 'Город', 'Дата рождения',
@@ -1381,22 +1415,58 @@ def data_analysis(transform_category='', drop='', fillna=True, t='Targets', f='F
     # 'Семейное положение', 'Состояние', 'Хронические заболевания', 'QualityRatioTotal']
     data_features = pd.read_csv('../data/FULL/' + f + '.csv', delimiter=';', dtype=types)[titles]
     print("Features: ", data_features.shape)
+    # data_stat(data_features, name='BIN3')
     # Drop required columns:
-    if not def_drop == '':
-        data_features.drop(def_drop, axis=1, inplace=True)
     t_print = list(data_features)
     t_print.remove('ID (автономер в базе)')
     data_features = features_fillna_v2(data_features, fillna=fillna)
     print("FillNA: ", data_features.shape)
+    data_features = add_features(data_features)
     data_features = get_mobile(data_features, mode='Operator')
     # --- Mobile ---
     print_bar(data_features, tmp='Mobile', annotate=True)
     # --- E-mail ---
     data_features = get_email(data_features)
-    tmp = data_features.groupby(by='E-mail').size()
-    tmp.sort_values(ascending=False, inplace=True)
-    print(data_features['BIN'])
+    if not def_drop == '':
+        data_features.drop(def_drop, axis=1, inplace=True)
+    data_features = thin(data_features)
+    categorical_titles = list(data_features.select_dtypes(exclude=[np.number]))
+    print(categorical_titles)
+    work_titles = list(data_features)
+    categories = {}
+    for it in categorical_titles:
+        data_features[it] = data_features[it].astype('category')
+        categories[it] = data_features[it].cat.categories
+    np.save('LabelEncoding/OneHot.npy', categories)
+    print(categories)
 
+    print(data_features)
+    new_data = pd.get_dummies(data_features, columns=categorical_titles)
+    print(new_data.shape)
+
+    # test_features = pd.read_csv('../data/FULL/Features_test.csv', delimiter=';', dtype=types)[titles]
+    # print("Features: ", test_features.shape)
+    # # Drop required columns:
+    # t_print = list(test_features)
+    # t_print.remove('ID (автономер в базе)')
+    # test_features = features_fillna_v2(test_features, fillna=fillna)
+    # print("FillNA: ", test_features.shape)
+    # test_features = add_features(test_features)
+    # test_features = get_mobile(test_features, mode='Operator')
+    # # --- E-mail ---
+    # test_features = get_email(test_features)
+    # if not def_drop == '':
+    #     test_features.drop(def_drop, axis=1, inplace=True)
+    # categories_2 = np.load('LabelEncoding/OneHot.npy').item()
+    # print(categories_2)
+    # for it in categories_2.keys():
+    #     test_features[it] = test_features[it].astype('category')
+    #     test_features[it].cat.set_categories(categories_2[it], inplace=True)
+    # new_test = pd.get_dummies(test_features, columns=categorical_titles)
+    # print(new_test.shape)
+
+    # if transform_category in ['OneHot', 'LabelsEncode']:
+    #     data = category_encode(data_features, titles=categorical_titles, mode=transform_category)
 
     # for it in t_print:
     #     get_bottom(data_features, tmp=it)
@@ -1424,23 +1494,11 @@ def data_analysis(transform_category='', drop='', fillna=True, t='Targets', f='F
     # data_target.reset_index(level=0, inplace=True)
     # print(data_target)
 
-    # for name, group in grouped:
-    #     print(name, '\n----')
-    #     print(group)
-    # print("Target: ", data_target.shape)
 
     # # Merge 2 parts of data to one DataFrame
     # data = data_features.merge(data_target,
     #                            on='ID (автономер в базе)')
     # print("Merged: ", data.shape)
-    # print(data)
-    # print_bar(data, tmp='BIN')
-    # missing_data(data)
-    # # missing_data(data, plot=True)
-
-    # data = features_fillna_v2(data, fillna=fillna)
-    # print("FillNA: ", data.shape)
-    # stat = data_stat(data, name='FillNA')
 
     # #
     # # Munging data
@@ -1473,3 +1531,4 @@ def data_analysis(transform_category='', drop='', fillna=True, t='Targets', f='F
     # X = data[t_t]
     # Y = data[list(data_target)[1:]]
     # return X, Y, work_titles
+
