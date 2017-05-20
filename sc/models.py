@@ -13,6 +13,15 @@ from sklearn.metrics import roc_curve, auc
 from sklearn.model_selection import train_test_split
 
 
+def thin_data(data, dict={'Имя': 1, 'Отчество': 2}):
+    for t in dict.keys():
+        tmp = data.groupby(by=t).size()
+        tmp.sort_values(ascending=False, inplace=True)
+        most_popular = tmp[tmp > dict[t]].index.get_values()
+        data[t] = data[t].progress_apply(lambda t: t if (t in most_popular) else 'Редкое')
+    return data
+
+
 # ----------------------------------------- Test Models via Data Modifications  -------------------------------------
 def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3', drop='',
                  fillna=True,
@@ -20,7 +29,8 @@ def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3',
                  name_modification=True,
                  emails=True,
                  mob=True,
-                 all=False, use_private=False, clean_target=False, required_titles='', no_split=False):
+                 all=False, use_private=False, clean_target=False, required_titles='', no_split=False,
+                 thin_names=False):
     """Loading data from steady CSV-files"""
     # Loading from steady-files:
     types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64, 'BIN': np.int64, 'Мобильный телефон': np.int64}
@@ -91,6 +101,10 @@ def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3',
     # ---- Add MOBILE ----
     if mob:
         data = get_mobile(data, mode='Operator')
+    if thin_names:
+        data = thin_data(data)
+        print("After Names cutting...")
+        data_stat(data)
     # data.to_excel('FinalDataSet.xlsx')
     # Drop required columns:
     if not def_drop == '':
@@ -112,7 +126,7 @@ def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3',
 
 
 def split_data(data):
-    data.drop('ID (автономер в базе)', axis=1, inplace=True)
+    data = data.drop('ID (автономер в базе)', axis=1)
     t_t = list(data)
     t_t.remove('QualityRatioTotal')
     X = data[t_t]
@@ -128,6 +142,8 @@ def prepare_test_set(data):
     data_target = grouped.agg({'QualityRatioTotal': np.sum})
     data_target['QualityRatioTotal'] = data_target['QualityRatioTotal'].apply(np.sign)
     return data_target
+
+
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def test_LR(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
             t='Targets2016'):
@@ -250,6 +266,117 @@ def LR(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=Tru
         print(train_data.shape)
         train_data_new = SelectFromModel(lr).fit_transform(train_data, train_target)
         print(train_data_new.shape)
+    y_predict = lr.fit(train_data_new, train_target).decision_function(X_test)
+    fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+    plt.figure()
+    lw = 2
+    plt.plot(fpr, tpr, color='darkorange',
+             lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic +' + title)
+    plt.legend(loc="lower right")
+    if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
+        os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
+    plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
+        '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+    tt = timer() - start
+    return auc(fpr, tpr)
+
+    print("C parameter is " + str(C))
+    print("Score is ", scores.mean())
+    print("Time elapsed: ", tt)
+    print("""-----------¯\_(ツ)_/¯ -----------""")
+
+    # Draw it:
+    # Draw and save plot
+    sns.set(font_scale=2)
+    plt.rcParams.update({'font.size': 22})
+    fig = plt.figure("Logistic regression: ", figsize=(16, 12))
+    fig.suptitle('Logistic regression  ' + str(scores.mean()), fontweight='bold')
+    ax = fig.add_subplot(111)
+    ax.set_ylabel('AUC mean', fontsize=20, labelpad=10)
+    ax.set_xlabel('log(C)', labelpad=10)
+    ax.plot(_range, quality, 'b', linewidth=2)
+    ax.grid(True)
+    if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
+        os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
+    plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
+        '%d_%H%M') + '.png')
+
+
+# ----------------------------------------- Test Logistic Regression  -------------------------------------
+def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
+          t='Targets2016', required='', cut=False):
+    """Testing linear method for train"""
+    train_data = load_data_v3(transform_category='OneHot', t=t, f=f, drop=drop, all=True,
+                              required_titles=required, no_split=True, thin_names=cut)
+    # shuffle and split training and test sets
+    fnd = False
+    selected = []
+    selected.append('ID (автономер в базе)')
+    selected.append('QualityRatioTotal')
+
+    # KFold for splitting
+    cv = KFold(n_splits=10,
+               shuffle=True,
+               random_state=241)
+
+    lr = LogisticRegression(C=C,
+                            random_state=241,
+                            n_jobs=-1)
+
+    if selectK == 'best':
+        # Select features from model
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data = pd.DataFrame(scaler.fit_transform(train_data),
+                                  index=train_data.index, columns=train_data.columns)
+        print("Scaling complete!")
+        print('Features from model..')
+        print(train_data.shape)
+        print(list(train_data))
+        x, y = split_data(train_data)
+        k_best = SelectFromModel(lr).fit(x, y)
+        mask = list(x[k_best.get_support(indices=True)])
+        selected.extend(mask)
+        train_data_new = train_data[selected]
+        print('Selected best features: ', train_data_new.shape)
+    elif not selectK == '':
+        # Select TOP K features
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data = pd.DataFrame(scaler.fit_transform(train_data),
+                                  index=train_data.index, columns=train_data.columns)
+        print("Scaling complete!")
+        print(train_data.shape)
+        x, y = split_data(train_data)
+        k_best = SelectKBest(chi2, k=selectK).fit(x, y)
+        mask = list(x[k_best.get_support(indices=True)])
+        selected.extend(mask)
+        # train_data_new = pd.DataFrame(k_best.transform(x),
+        #                               index=x.index, columns=x[mask].columns)
+        train_data_new = train_data[selected]
+        print('Selected ' + str(selectK) + ' best features: ', train_data_new.shape)
+    else:
+        # WIthout feature selection
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data_new = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                      index=train_data.index,
+                                      columns=train_data.columns)
+        print("Scaling complete!")
+        print("NO features selection!")
+
+    train_data_new, X_test = train_test_split(train_data_new, test_size=.3,
+                                              random_state=241)
+    print("Splitting to train and test sets completed!")
+    print(train_data_new.shape, X_test.shape)
+    train_data_new, train_target = split_data(train_data_new)
+    print('Train sets: ', train_data_new.shape, train_target.shape)
+    X_test, y_test = split_data(prepare_test_set(X_test))
+    print('Test sets: ', X_test.shape, y_test.shape)
+    start = timer()
     y_predict = lr.fit(train_data_new, train_target).decision_function(X_test)
     fpr, tpr, thresholds = roc_curve(y_test, y_predict)
     plt.figure()
@@ -421,3 +548,89 @@ def different_features():
         os.makedirs('../data/Results/LogisticRegression/')
     plt.savefig('../data/Results/LogisticRegression/Comparing_' + datetime.now().strftime(
         '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+
+# ----------------------------------------- Test Logistic Regression  -------------------------------------
+def RF(drop='', est=5000, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
+          t='Targets2016', required='', cut=False):
+    """Testing linear method for train"""
+    train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True,
+                              required_titles=required, no_split=True)
+    # shuffle and split training and test sets
+    fnd = False
+    selected = []
+    selected.append('ID (автономер в базе)')
+    selected.append('QualityRatioTotal')
+
+    # KFold for splitting
+    cv = KFold(n_splits=10,
+               shuffle=True,
+               random_state=241)
+
+    rf = RandomForestClassifier(n_estimators=est, random_state=241, n_jobs=-1)
+
+    if selectK == 'best':
+        # Select features from model
+        print('Features from model..')
+        print(train_data.shape)
+        print(list(train_data))
+        x, y = split_data(train_data)
+        k_best = SelectFromModel(rf).fit(x, y)
+        mask = list(x[k_best.get_support(indices=True)])
+        selected.extend(mask)
+        train_data = train_data[selected]
+        print('Selected best features: ', selected)
+    else:
+        print("NO features selection!")
+
+    train_data_new, X_test = train_test_split(train_data, test_size=.3,
+                                              random_state=241)
+    print("Splitting to train and test sets completed!")
+    print(train_data_new.shape, X_test.shape)
+    train_data_new, train_target = split_data(train_data_new)
+    print('Train sets: ', train_data_new.shape, train_target.shape)
+    X_test, y_test = split_data(prepare_test_set(X_test))
+    print('Test sets: ', X_test.shape, y_test.shape)
+    start = timer()
+    y_predict = pd.DataFrame(rf.fit(train_data_new, train_target).predict_proba(X_test))
+    y_predict = np.array(y_predict[1])
+    print(y_predict)
+    fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+    plt.figure()
+    lw = 2
+    plt.plot(fpr, tpr, color='darkorange',
+             lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+    plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic +' + title)
+    plt.legend(loc="lower right")
+    if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
+        os.makedirs('../data/Results/RandomForest/' + fea + '/')
+    plt.savefig('../data/Results/RandomForest/' + fea + '/' + title + '_' + datetime.now().strftime(
+        '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+    tt = timer() - start
+    return auc(fpr, tpr)
+
+    print("C parameter is " + str(C))
+    print("Score is ", scores.mean())
+    print("Time elapsed: ", tt)
+    print("""-----------¯\_(ツ)_/¯ -----------""")
+
+    # Draw it:
+    # Draw and save plot
+    sns.set(font_scale=2)
+    plt.rcParams.update({'font.size': 22})
+    fig = plt.figure("Logistic regression: ", figsize=(16, 12))
+    fig.suptitle('Logistic regression  ' + str(scores.mean()), fontweight='bold')
+    ax = fig.add_subplot(111)
+    ax.set_ylabel('AUC mean', fontsize=20, labelpad=10)
+    ax.set_xlabel('log(C)', labelpad=10)
+    ax.plot(_range, quality, 'b', linewidth=2)
+    ax.grid(True)
+    if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
+        os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
+    plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
+        '%d_%H%M') + '.png')
+

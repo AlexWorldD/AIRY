@@ -47,15 +47,8 @@ if __name__ == '__main__':
     # test_LR(scoring='f1', title='f1')
     titles = ['E-mail', 'Гражданство',
               'Mobile', 'Zodiac', 'DayOfBirth', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество', 'Город']
-    X = load_data_v3(all=True, no_split=True)
-    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-    train_data_new = pd.DataFrame(scaler.fit_transform(X.values),
-                                  index=X.index,
-                                  columns=X.columns)
-
-    train_data_new, X_test = train_test_split(X, test_size=.3,
-                                              random_state=241)
-    print(split_data(train_data_new))
+    # LR_v2(title='NewVersionBEST', cut=True, selectK='best')
+    RF(selectK='best', title='5kTrees')
     # t_t = list(train_data_new)
     # t_t.remove('QualityRatioTotal')
     # grouped = train_data_new.groupby(t_t, as_index=False)
