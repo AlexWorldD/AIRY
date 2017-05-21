@@ -76,7 +76,7 @@ if __name__ == '__main__':
               'Mobile', 'Zodiac', 'DayOfBirth', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество', 'Город']
 
     # find_alpha()
-    LR_v2(title='NewVersionBEST', cut=True, selectK='best')
+    LR_v2(title='Without0.5', cut=True, selectK='best')
     # predicted1, y1 = LR_v2(title='NewVersionBEST', cut=True, selectK='best', no_plot=True, final=True)
     # predicted1 = modify_prediction(predicted1)
     # y1 = np.array(y1)

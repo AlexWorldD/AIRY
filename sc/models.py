@@ -9,7 +9,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
-from sklearn.metrics import roc_curve, auc, roc_auc_score, accuracy_score, precision_score, recall_score, f1_score, fbeta_score
+from sklearn.metrics import roc_curve, auc, roc_auc_score, accuracy_score, precision_score, recall_score, f1_score, \
+    fbeta_score
 from sklearn.model_selection import train_test_split
 from tqdm import tnrange, tqdm_notebook
 
@@ -112,8 +113,8 @@ def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3',
         data = get_mobile(data, mode='Operator')
     if thin_names:
         data = thin_data(data)
-        print("After Names cutting...")
-        data_stat(data)
+        # print("After Names cutting...")
+        # data_stat(data)
     # data.to_excel('FinalDataSet.xlsx')
     # Drop required columns:
     if not def_drop == '':
@@ -148,23 +149,22 @@ def prepare_test_set(data, q_min=0.5, q_max=0.5, final=False):
     t_t = list(data)
     t_t.remove('QualityRatioTotal')
     grouped = data.groupby(t_t, as_index=False)
+
+    data_target = grouped.agg({'QualityRatioTotal': [np.sum, np.size]}).rename(columns={'sum': 'Positive',
+                                                                                        'size': 'All'})
+    # data_target = grouped.agg({'QualityRatioTotal': [np.sum, np.size]})
+    # data_target = grouped['QualityRatioTotal'].agg([np.sum, np.size]).rename(columns={'sum': 'QualityRatioTotal',
+    #                                                                                   'size': 'Size'})
+    tqdm.pandas(desc="Calculate test quality rates")
+    # Calculate QualityRatio:
+    data_target['QualityRatio'] = data_target['QualityRatioTotal'].progress_apply(person_score, axis=1,
+                                                                                  args=(q_min, q_max))
+    # Dropping unnecessary columns:
+    data_target.drop('QualityRatioTotal', axis=1, inplace=True)
+    data_target.rename(columns={'QualityRatio': 'QualityRatioTotal'}, inplace=True)
+    data_target.columns = data_target.columns.droplevel(1)
     if not final:
-        data_target = grouped.agg({'QualityRatioTotal': np.sum})
-        data_target['QualityRatioTotal'] = data_target['QualityRatioTotal'].apply(np.sign)
-    else:
-        data_target = grouped.agg({'QualityRatioTotal': [np.sum, np.size]}).rename(columns={'sum': 'Positive',
-                                                                                            'size': 'All'})
-        # data_target = grouped.agg({'QualityRatioTotal': [np.sum, np.size]})
-        # data_target = grouped['QualityRatioTotal'].agg([np.sum, np.size]).rename(columns={'sum': 'QualityRatioTotal',
-        #                                                                                   'size': 'Size'})
-        tqdm.pandas(desc="Calculate test quality rates")
-        # Calculate QualityRatio:
-        data_target['QualityRatio'] = data_target['QualityRatioTotal'].progress_apply(person_score, axis=1,
-                                                                                      args=(q_min, q_max))
-        # Dropping unnecessary columns:
-        data_target.drop('QualityRatioTotal', axis=1, inplace=True)
-        data_target.rename(columns={'QualityRatio': 'QualityRatioTotal'}, inplace=True)
-        data_target.columns = data_target.columns.droplevel(1)
+        data_target = data_target.drop(data_target[data_target['QualityRatioTotal'] == 0.5].index)
     return data_target
 
 
@@ -410,7 +410,7 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
-    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.3, q_max=0.6))
+    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.35, q_max=0.65))
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
     y_predict = pd.DataFrame(lr.fit(train_data_new, train_target).predict_proba(X_test))
