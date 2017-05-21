@@ -9,7 +9,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
-from sklearn.metrics import roc_curve, auc, roc_auc_score
+from sklearn.metrics import roc_curve, auc, roc_auc_score, accuracy_score, precision_score, recall_score, f1_score, fbeta_score
 from sklearn.model_selection import train_test_split
 from tqdm import tnrange, tqdm_notebook
 
@@ -144,13 +144,40 @@ def split_data(data):
     return X, Y
 
 
-def prepare_test_set(data):
+def prepare_test_set(data, q_min=0.5, q_max=0.5, final=False):
     t_t = list(data)
     t_t.remove('QualityRatioTotal')
     grouped = data.groupby(t_t, as_index=False)
-    data_target = grouped.agg({'QualityRatioTotal': np.sum})
-    data_target['QualityRatioTotal'] = data_target['QualityRatioTotal'].apply(np.sign)
+    if not final:
+        data_target = grouped.agg({'QualityRatioTotal': np.sum})
+        data_target['QualityRatioTotal'] = data_target['QualityRatioTotal'].apply(np.sign)
+    else:
+        data_target = grouped.agg({'QualityRatioTotal': [np.sum, np.size]}).rename(columns={'sum': 'Positive',
+                                                                                            'size': 'All'})
+        # data_target = grouped.agg({'QualityRatioTotal': [np.sum, np.size]})
+        # data_target = grouped['QualityRatioTotal'].agg([np.sum, np.size]).rename(columns={'sum': 'QualityRatioTotal',
+        #                                                                                   'size': 'Size'})
+        tqdm.pandas(desc="Calculate test quality rates")
+        # Calculate QualityRatio:
+        data_target['QualityRatio'] = data_target['QualityRatioTotal'].progress_apply(person_score, axis=1,
+                                                                                      args=(q_min, q_max))
+        # Dropping unnecessary columns:
+        data_target.drop('QualityRatioTotal', axis=1, inplace=True)
+        data_target.rename(columns={'QualityRatio': 'QualityRatioTotal'}, inplace=True)
+        data_target.columns = data_target.columns.droplevel(1)
     return data_target
+
+
+def person_score(t, min, max):
+    pos = t['Positive']
+    all = t['All']
+    res = pos / all
+    if res > max:
+        return 1
+    elif res < min:
+        return 0
+    else:
+        return 0.5
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
@@ -319,7 +346,7 @@ def LR(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=Tru
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
-          t='Targets2016', required='', cut=False, no_plot=False):
+          t='Targets2016', required='', cut=False, no_plot=False, final=False):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='OneHot', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True, thin_names=cut)
@@ -383,7 +410,7 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
-    X_test, y_test = split_data(prepare_test_set(X_test))
+    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.3, q_max=0.6))
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
     y_predict = pd.DataFrame(lr.fit(train_data_new, train_target).predict_proba(X_test))
@@ -407,7 +434,7 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
         plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
             '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
         tt = timer() - start
-    return y_test, y_predict
+    return y_predict, y_test
 
     print("C parameter is " + str(C))
     print("Score is ", scores.mean())
@@ -668,6 +695,14 @@ def RF(drop='', est=5000, fea='', scoring='roc_auc', title='', selectK='', filln
         '%d_%H%M') + '.png')
 
 
+def proba(t, a=0.6):
+    m = t > a
+    m2 = t <= a
+    t[m] = 1
+    t[m2] = 0
+    return t
+
+
 def find_alpha():
     p1 = np.load('Results/predicted1.npy')
     p2 = np.load('Results/predicted2.npy')
@@ -677,12 +712,13 @@ def find_alpha():
     st = 0.3
     for a in trange(30, desc='Searching best alpha'):
         st = 0.3 + a / 50
-        res = roc_auc_score(y1, f_measure2(p1, p2, alpha=st))
+        res = fbeta_score(y1, proba(f_measure2(p1, p2, alpha=st)), beta=0.15)
+        # res = precision_score(y1, proba(f_measure2(p1, p2, alpha=st)))
         complex.append(res)
         print(res)
     score_best = max(complex)
     idx = complex.index(score_best)
     alpha = np.linspace(0.3, 0.9, num=30)[idx]
-    print('Best score: AUC ROC=' + str(score_best))
+    print('Best score: Precision=' + str(score_best))
     print('Alpha: ', str(alpha))
     roc_score(y1, f_measure2(p1, p2, alpha=alpha))

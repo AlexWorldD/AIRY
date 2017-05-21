@@ -24,12 +24,28 @@ from tqdm import tnrange, tqdm_notebook
 ID = 'ID (автономер в базе)'
 
 
-def f_measure(p1, p2, alpha=0.5):
-    return 1 / (alpha * (1 / p1) + (1 - alpha) * (1 / p2))
+def modify_prediction(t, min=0.4, max=0.5):
+    m1 = t > max
+    m2 = t < min
+    m3 = (t <= max) & (t >= min)
+    t[m1] = 1
+    t[m2] = 0
+    t[m3] = 0.5
+    return t
 
-
-def f_measure2(p1, p2, alpha=0.5):
-    return alpha * p1 + (1 - alpha) * p2
+def proba(t, a=0.6):
+    m = t>a
+    m2 = t<=a
+    t[m]=1
+    t[m2]=0
+    return t
+def acc(y, p):
+    print(p)
+    print(y)
+    res = (p==1).astype(np.int16)
+    res2 = (y == 1).astype(np.int16)
+    return np.sum(res)/np.sum(res2)
+    # return np.sum(res)/res.size
 
 
 if __name__ == '__main__':
@@ -60,8 +76,11 @@ if __name__ == '__main__':
               'Mobile', 'Zodiac', 'DayOfBirth', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество', 'Город']
 
     # find_alpha()
-    # LR_v2(title='NewVersionBEST', cut=True, selectK='best')
-    predicted1, y1 = LR_v2(title='NewVersionBEST', cut=True, selectK='best', no_plot=True)
+    LR_v2(title='NewVersionBEST', cut=True, selectK='best')
+    # predicted1, y1 = LR_v2(title='NewVersionBEST', cut=True, selectK='best', no_plot=True, final=True)
+    # predicted1 = modify_prediction(predicted1)
+    # y1 = np.array(y1)
+    # print(acc(y1, modify_prediction(predicted1)))
     # predicted2, y2 = RF(selectK='best', title='5kTrees', no_plot=True)
     # np.save('Results/predicted1.npy', predicted1)
     # np.save('Results/predicted2.npy', predicted2)
