@@ -33,18 +33,21 @@ def modify_prediction(t, min=0.4, max=0.5):
     t[m3] = 0.5
     return t
 
+
 def proba(t, a=0.6):
-    m = t>a
-    m2 = t<=a
-    t[m]=1
-    t[m2]=0
+    m = t > a
+    m2 = t <= a
+    t[m] = 1
+    t[m2] = 0
     return t
+
+
 def acc(y, p):
     print(p)
     print(y)
-    res = (p==1).astype(np.int16)
+    res = (p == 1).astype(np.int16)
     res2 = (y == 1).astype(np.int16)
-    return np.sum(res)/np.sum(res2)
+    return np.sum(res) / np.sum(res2)
     # return np.sum(res)/res.size
 
 
@@ -75,11 +78,30 @@ if __name__ == '__main__':
     titles = ['E-mail', 'Гражданство',
               'Mobile', 'Zodiac', 'DayOfBirth', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество', 'Город']
 
-    # test_LR(fea='color')
+    # Cutting patronymic:
+    # res = []
+    # for name in trange(1, 6, desc='Name'):
+    #     for pat in trange(2, 10, 2, desc='Patronymic'):
+    #         res.append(Neural_v2(fea='ToWord', title='Complex', C=1, cut=[name, pat], hidden=(100,)))
+    # best = max(res)
+    # idx = res.index(best)
+    # np.save('Results/Name_Patr_100.npy', res)
+    # print(idx)
+    # print('Name: ', int(idx)//len(range(2, 10, 2))+1)
+    # print('Patronymic: ', int(idx) % len(range(2, 10, 2)))
+    # print(max(res))
+    # res = np.load('Results/Name_Patr_100.npy')
+    # print(res)
+
+    print(Neural_v2(fea='ToWord', title='bestNamePat', C=1, cut=[2, 2], hidden=(50, 50), plot_auc=True, make_pretty=3000))
+    # Neural_v2(fea='ToWord', title='Complex', C=1, cut=[4,8], hidden=(50,50), save=True)
+    # LR_v2(title='NewVersionBEST', cut=[4,8], selectK='best', save=True)
+    # find_alpha()
+    # find_bestNeural(fea='GRID',  cut=[2, 2], title='alpha_1_')
     # find_bestLR(fea='GRID', cut=True, drop=['Субъект федерации'], title='Full_withKSelect', selectK=550)
     # find_alpha()
     # test_LR(title='LR_C', selectK=540)
-    LR_v2(title='l2_norm', selectK='best', C=10)
+    # LR_v2(fea='ToWord', title='l2_norm', selectK='best', C=10, plot_auc=True, plot_pr=True, cut=[10,4])
     # predicted1, y1 = LR_v2(title='NewVersionBEST', cut=True, selectK='best', no_plot=True, final=True)
     # predicted1 = modify_prediction(predicted1)
     # y1 = np.array(y1)
