@@ -75,8 +75,11 @@ if __name__ == '__main__':
     titles = ['E-mail', 'Гражданство',
               'Mobile', 'Zodiac', 'DayOfBirth', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество', 'Город']
 
+    # test_LR(fea='color')
+    # find_bestLR(fea='GRID', cut=True, drop=['Субъект федерации'], title='Full_withKSelect', selectK=550)
     # find_alpha()
-    LR_v2(title='Without0.5', cut=True, selectK='best')
+    # test_LR(title='LR_C', selectK=540)
+    LR_v2(title='l2_norm', selectK='best', C=10)
     # predicted1, y1 = LR_v2(title='NewVersionBEST', cut=True, selectK='best', no_plot=True, final=True)
     # predicted1 = modify_prediction(predicted1)
     # y1 = np.array(y1)
