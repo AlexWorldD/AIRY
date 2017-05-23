@@ -361,8 +361,8 @@ def LR(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=Tru
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
-          t='Targets2016', required='', cut=None, no_plot=False, final=False, plot_auc=False, plot_pr=False,
-          save=False):
+          t='Targets2016', required='', cut=[2, 8], no_plot=False, final=False, plot_auc=False, plot_pr=False,
+          save=False, make_pretty=0):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='OneHot', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True, thin_names=cut)
@@ -430,9 +430,13 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
     y_predict = pd.DataFrame(lr.fit(train_data_new, train_target).predict_proba(X_test))
-    print(pd.DataFrame(y_predict))
     y_predict = np.array(y_predict[1])
-    print(y_predict)
+    # print(y_predict)
+    # print('---', y_test)
+    if make_pretty>0:
+        y_test = y_test[:make_pretty]
+        y_predict = y_predict[:make_pretty]
+
     if plot_auc:
         fpr, tpr, thresholds = roc_curve(y_test[:2200], y_predict[:2200])
         plt.figure(figsize=(16, 10))
@@ -483,7 +487,7 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
     if save:
         np.save('Results/LR_pred.npy', y_predict)
         np.save('Results/LR_y.npy', y_test)
-    return y_predict, y_test
+    return roc_auc_score(y_test, y_predict)
 
     print("C parameter is " + str(C))
     print("Score is ", scores.mean())
@@ -655,93 +659,6 @@ def different_features():
         os.makedirs('../data/Results/LogisticRegression/')
     plt.savefig('../data/Results/LogisticRegression/Comparing_' + datetime.now().strftime(
         '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
-
-
-# ----------------------------------------- Test Logistic Regression  -------------------------------------
-def RF(drop='', est=5000, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
-       t='Targets2016', required='', cut=False, no_plot=False):
-    """Testing linear method for train"""
-    train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True,
-                              required_titles=required, no_split=True)
-    # shuffle and split training and test sets
-    fnd = False
-    selected = []
-    selected.append('ID (автономер в базе)')
-    selected.append('QualityRatioTotal')
-
-    # KFold for splitting
-    cv = KFold(n_splits=10,
-               shuffle=True,
-               random_state=241)
-
-    rf = RandomForestClassifier(n_estimators=est, random_state=241, n_jobs=-1)
-
-    if selectK == 'best':
-        # Select features from model
-        print('Features from model..')
-        print(train_data.shape)
-        print(list(train_data))
-        x, y = split_data(train_data)
-        k_best = SelectFromModel(rf).fit(x, y)
-        mask = list(x[k_best.get_support(indices=True)])
-        selected.extend(mask)
-        train_data = train_data[selected]
-        print('Selected best features: ', selected)
-    else:
-        print("NO features selection!")
-
-    train_data_new, X_test = train_test_split(train_data, test_size=.3,
-                                              random_state=241)
-    print("Splitting to train and test sets completed!")
-    print(train_data_new.shape, X_test.shape)
-    train_data_new, train_target = split_data(train_data_new)
-    print('Train sets: ', train_data_new.shape, train_target.shape)
-    X_test, y_test = split_data(prepare_test_set(X_test))
-    print('Test sets: ', X_test.shape, y_test.shape)
-    start = timer()
-    y_predict = pd.DataFrame(rf.fit(train_data_new, train_target).predict_proba(X_test))
-    y_predict = np.array(y_predict[1])
-    print(y_predict)
-    if not no_plot:
-        fpr, tpr, thresholds = roc_curve(y_test, y_predict)
-        plt.figure()
-        lw = 2
-        plt.plot(fpr, tpr, color='darkorange',
-                 lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
-        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver operating characteristic +' + title)
-        plt.legend(loc="lower right")
-        if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
-            os.makedirs('../data/Results/RandomForest/' + fea + '/')
-        plt.savefig('../data/Results/RandomForest/' + fea + '/' + title + '_' + datetime.now().strftime(
-            '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
-    tt = timer() - start
-    return y_predict, y_test
-
-    print("C parameter is " + str(C))
-    print("Score is ", scores.mean())
-    print("Time elapsed: ", tt)
-    print("""-----------¯\_(ツ)_/¯ -----------""")
-
-    # Draw it:
-    # Draw and save plot
-    sns.set(font_scale=2)
-    plt.rcParams.update({'font.size': 22})
-    fig = plt.figure("Logistic regression: ", figsize=(16, 12))
-    fig.suptitle('Logistic regression  ' + str(scores.mean()), fontweight='bold')
-    ax = fig.add_subplot(111)
-    ax.set_ylabel('AUC mean', fontsize=20, labelpad=10)
-    ax.set_xlabel('log(C)', labelpad=10)
-    ax.plot(_range, quality, 'b', linewidth=2)
-    ax.grid(True)
-    if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
-        os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
-    plt.savefig('../data/Results/LogisticRegression/' + fea + '/' + title + '_' + datetime.now().strftime(
-        '%d_%H%M') + '.png')
 
 
 def proba(t, a=0.65):
@@ -1109,3 +1026,99 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
         np.save('Results/Neural_y.npy', y_test)
     return roc_auc_score(y_test, y_predict)
     # return y_predict, y_test
+
+# ----------------------------------------- Test Logistic Regression  -------------------------------------
+def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
+                t='Targets2016', cut=False, parallel=[-1, 4]):
+    """Testing linear method for train"""
+    train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True, no_split=True, thin_names=cut)
+
+    N = [20, 50, 100, 200, 500, 1000]
+    selected = []
+    selected.append('ID (автономер в базе)')
+    selected.append('QualityRatioTotal')
+    grid = [
+        {'criterion': ('gini', 'entropy'),
+         'n_estimators': N,
+         'max_features': [0.5, 'log2', 'auto', None],
+         'max_depth': [None, 10]
+         }
+    ]
+
+    # KFold for splitting
+    cv = KFold(n_splits=5,
+               shuffle=True,
+               random_state=241)
+    rf = RandomForestClassifier(random_state=241, n_jobs=-1)
+    if not selectK == '':
+        # Select TOP K features
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data = pd.DataFrame(scaler.fit_transform(train_data),
+                                  index=train_data.index, columns=train_data.columns)
+        print("Scaling complete!")
+        print(train_data.shape)
+        x, y = split_data(train_data)
+        k_best = SelectKBest(chi2, k=selectK).fit(x, y)
+        mask = list(x[k_best.get_support(indices=True)])
+        selected.extend(mask)
+        # train_data_new = pd.DataFrame(k_best.transform(x),
+        #                               index=x.index, columns=x[mask].columns)
+        train_data_new = train_data[selected]
+        print('Selected ' + str(selectK) + ' best features: ', train_data_new.shape)
+    else:
+        # WIthout feature selection
+        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
+        train_data_new = pd.DataFrame(scaler.fit_transform(train_data.values),
+                                      index=train_data.index,
+                                      columns=train_data.columns)
+        print("Scaling complete!")
+        print("NO features selection!")
+
+    train_data_new, X_test = train_test_split(train_data_new, test_size=.3,
+                                              random_state=241)
+    print("Splitting to train and test sets completed!")
+    print(train_data_new.shape, X_test.shape)
+    train_data_new, train_target = split_data(train_data_new)
+    print('Train sets: ', train_data_new.shape, train_target.shape)
+    X_test, y_test = split_data(prepare_test_set(X_test, final=False, q_min=0.4, q_max=0.7))
+    print('Test sets: ', X_test.shape, y_test.shape)
+
+    start = timer()
+    clf = GridSearchCV(estimator=rf,
+                       param_grid=grid,
+                       scoring=scoring,
+                       cv=cv,
+                       n_jobs=parallel[0],
+                       pre_dispatch=parallel[1],
+                       verbose=3)
+    # ---- EPIC HERE ----
+    clf.fit(train_data_new, train_target)
+
+    y_predict = pd.DataFrame(clf.best_estimator_.fit(train_data_new, train_target).predict_proba(X_test))
+    y_predict = np.array(y_predict[1])
+    # Draw and save plot
+    fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+    plt.figure()
+    lw = 2
+    plt.plot(fpr, tpr, color='navy',
+             lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+    plt.plot([0, 1], [0, 1], color='lightskyblue', lw=lw, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic +' + title)
+    plt.legend(loc="lower right")
+    if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
+        os.makedirs('../data/Results/RandomForest/' + fea + '/')
+    plt.savefig('../data/Results/RandomForest/' + fea + '/' + title + '_' + datetime.now().strftime(
+        '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+
+    print("Наилучший результат достигается при: ", clf.cv_results_['params'][clf.best_index_])
+    print("Score is ", clf.best_score_, ' with scoring=', scoring)
+    print('Time ', timer() - start)
+    results = pd.DataFrame(clf.cv_results_)
+    results.to_excel(title + 'RF.xlsx')
+    np.save('FeatureImportance.npy', clf.best_estimator_.feature_importances_)
+    print(clf.best_estimator_.feature_importances_)
+    tt = timer() - start
