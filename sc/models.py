@@ -53,7 +53,7 @@ def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3',
     # Loading from steady-files:
     types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64, 'BIN': np.int64, 'Мобильный телефон': np.int64}
     def_drop = ['Фамилия']
-    use = ['Пол', 'Возраст', 'QualityRatioTotal']
+    use = ['QualityRatioTotal']
     if not required_titles == '':
         use.extend(required_titles)
     base = ['ID (автономер в базе)', 'Пол', 'Дата рождения', 'Возраст', 'QualityRatioTotal']
@@ -438,7 +438,7 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
         y_predict = y_predict[:make_pretty]
 
     if plot_auc:
-        fpr, tpr, thresholds = roc_curve(y_test[:2200], y_predict[:2200])
+        fpr, tpr, thresholds = roc_curve(y_test, y_predict)
         plt.figure(figsize=(16, 10))
         sns.set(font_scale=2)
         rc = {'axes.labelsize': 26, 'font.size': 12, 'legend.fontsize': 26, 'axes.titlesize': 14,
@@ -461,7 +461,7 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
         tt = timer() - start
         print("Score: ", auc(fpr, tpr))
     if plot_pr:
-        p, r, thresholds = precision_recall_curve(y_test[:1000], y_predict[:1000])
+        p, r, thresholds = precision_recall_curve(y_test, y_predict)
         plt.figure(figsize=(16, 10))
         sns.set(font_scale=2)
         rc = {'axes.labelsize': 26, 'font.size': 12, 'legend.fontsize': 26, 'axes.titlesize': 14,
@@ -1029,11 +1029,12 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
-                t='Targets2016', cut=False, parallel=[-1, 4]):
+                t='Targets2016', cut=False, parallel=[4, 2]):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True, no_split=True, thin_names=cut)
 
     N = [20, 50, 100, 200, 500, 1000]
+    N_v2 = [1000, 5000, 10000]
     selected = []
     selected.append('ID (автономер в базе)')
     selected.append('QualityRatioTotal')
@@ -1044,53 +1045,61 @@ def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna
          'max_depth': [None, 10]
          }
     ]
-
+    grid_light = [
+        {'n_estimators': N_v2,
+         'max_features': [0.5, 0.6, 0.7],
+         'max_depth': [3, 5, 8, 10]
+         }
+    ]
     # KFold for splitting
     cv = KFold(n_splits=5,
                shuffle=True,
                random_state=241)
     rf = RandomForestClassifier(random_state=241, n_jobs=-1)
-    if not selectK == '':
+    if selectK == 'best':
+        # Select features from model
+        print('Features from model..')
+        print(train_data.shape)
+        print(list(train_data))
+        x, y = split_data(train_data)
+        k_best = SelectFromModel(rf).fit(x, y)
+        mask = list(x[k_best.get_support(indices=True)])
+        selected.extend(mask)
+        train_data = train_data[selected]
+        print('Selected best features: ', train_data.shape)
+    elif not selectK == '':
         # Select TOP K features
-        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-        train_data = pd.DataFrame(scaler.fit_transform(train_data),
-                                  index=train_data.index, columns=train_data.columns)
-        print("Scaling complete!")
         print(train_data.shape)
         x, y = split_data(train_data)
         k_best = SelectKBest(chi2, k=selectK).fit(x, y)
         mask = list(x[k_best.get_support(indices=True)])
         selected.extend(mask)
-        # train_data_new = pd.DataFrame(k_best.transform(x),
-        #                               index=x.index, columns=x[mask].columns)
-        train_data_new = train_data[selected]
-        print('Selected ' + str(selectK) + ' best features: ', train_data_new.shape)
+        train_data = train_data[selected]
+        print('Selected ' + str(selectK) + ' best features: ', train_data.shape)
     else:
         # WIthout feature selection
-        scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-        train_data_new = pd.DataFrame(scaler.fit_transform(train_data.values),
-                                      index=train_data.index,
-                                      columns=train_data.columns)
-        print("Scaling complete!")
         print("NO features selection!")
 
-    train_data_new, X_test = train_test_split(train_data_new, test_size=.3,
+    train_data_new, X_test = train_test_split(train_data, test_size=.3,
                                               random_state=241)
     print("Splitting to train and test sets completed!")
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
+    print("Features sorted by their score:")
+    print(pd.DataFrame(sorted(zip(map(lambda x: round(x, 4), np.load('FeatureImportance.npy')), list(train_data_new)),
+                 reverse=True)))
     X_test, y_test = split_data(prepare_test_set(X_test, final=False, q_min=0.4, q_max=0.7))
     print('Test sets: ', X_test.shape, y_test.shape)
-
+    return
     start = timer()
     clf = GridSearchCV(estimator=rf,
-                       param_grid=grid,
+                       param_grid=grid_light,
                        scoring=scoring,
                        cv=cv,
                        n_jobs=parallel[0],
                        pre_dispatch=parallel[1],
-                       verbose=3)
+                       verbose=2)
     # ---- EPIC HERE ----
     clf.fit(train_data_new, train_target)
 
@@ -1098,16 +1107,19 @@ def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna
     y_predict = np.array(y_predict[1])
     # Draw and save plot
     fpr, tpr, thresholds = roc_curve(y_test, y_predict)
-    plt.figure()
-    lw = 2
-    plt.plot(fpr, tpr, color='navy',
+    plt.figure(figsize=(16, 10))
+    sns.set(font_scale=2)
+    rc = {'axes.labelsize': 26, 'font.size': 12, 'legend.fontsize': 26, 'axes.titlesize': 14,
+          'axes.facecolor': 'deeaf6'}
+    plt.rcParams.update(**rc)
+    lw = 4
+    plt.plot(fpr, tpr, color='#2e74b5',
              lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
-    plt.plot([0, 1], [0, 1], color='lightskyblue', lw=lw, linestyle='--')
+    plt.plot([0, 1], [0, 1], color='coral', lw=lw, linestyle='--')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver operating characteristic +' + title)
+    plt.xlabel('False Positive Rate', labelpad=20)
+    plt.ylabel('True Positive Rate', labelpad=20)
     plt.legend(loc="lower right")
     if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
         os.makedirs('../data/Results/RandomForest/' + fea + '/')
@@ -1120,5 +1132,129 @@ def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna
     results = pd.DataFrame(clf.cv_results_)
     results.to_excel(title + 'RF.xlsx')
     np.save('FeatureImportance.npy', clf.best_estimator_.feature_importances_)
-    print(clf.best_estimator_.feature_importances_)
+    print("Features sorted by their score:")
+    print(pd.DataFrame(sorted(zip(map(lambda x: round(x, 4), clf.best_estimator_.feature_importances_), list(train_data_new)),
+                              reverse=True)))
     tt = timer() - start
+
+
+# ----------------------------------------- Test Logistic Regression  -------------------------------------
+def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
+          t='Targets2016', required='', cut=[2, 8], final=False, plot_auc=False, plot_pr=False,
+          save=False, make_pretty=0):
+    """Testing linear method for train"""
+    train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True,
+                              required_titles=required, no_split=True, thin_names=cut)
+    # shuffle and split training and test sets
+    fnd = False
+    selected = []
+    selected.append('ID (автономер в базе)')
+    selected.append('QualityRatioTotal')
+
+    # KFold for splitting
+    cv = KFold(n_splits=10,
+               shuffle=True,
+               random_state=241)
+
+    rf = RandomForestClassifier(n_estimators=est,
+                                max_features=0.5,
+                                max_depth=10,
+                                random_state=241,
+                                n_jobs=-1)
+
+    if selectK == 'best':
+        # Select features from model
+        print('Features from model..')
+        print(train_data.shape)
+        print(list(train_data))
+        x, y = split_data(train_data)
+        k_best = SelectFromModel(rf).fit(x, y)
+        mask = list(x[k_best.get_support(indices=True)])
+        selected.extend(mask)
+        train_data = train_data[selected]
+        print('Selected best features: ', train_data.shape)
+    elif not selectK == '':
+        # Select TOP K features
+        print(train_data.shape)
+        x, y = split_data(train_data)
+        k_best = SelectKBest(chi2, k=selectK).fit(x, y)
+        mask = list(x[k_best.get_support(indices=True)])
+        selected.extend(mask)
+        train_data = train_data[selected]
+        print('Selected ' + str(selectK) + ' best features: ', train_data.shape)
+    else:
+        # WIthout feature selection
+        print("NO features selection!")
+
+    train_data_new, X_test = train_test_split(train_data, test_size=.3,
+                                              random_state=241)
+    print("Splitting to train and test sets completed!")
+    print(train_data_new.shape, X_test.shape)
+    train_data_new, train_target = split_data(train_data_new)
+    print('Train sets: ', train_data_new.shape, train_target.shape)
+    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.4, q_max=0.7))
+    print('Test sets: ', X_test.shape, y_test.shape)
+    start = timer()
+    y_predict = pd.DataFrame(rf.fit(train_data_new, train_target).predict_proba(X_test))
+    y_predict = np.array(y_predict[1])
+    # print(y_predict)
+    # print('---', y_test)
+    if make_pretty>0:
+        y_test = y_test[:make_pretty]
+        y_predict = y_predict[:make_pretty]
+
+    if plot_auc:
+        fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+        plt.figure(figsize=(16, 10))
+        sns.set(font_scale=2)
+        rc = {'axes.labelsize': 26, 'font.size': 12, 'legend.fontsize': 26, 'axes.titlesize': 14,
+              'axes.facecolor': 'deeaf6'}
+        plt.rcParams.update(**rc)
+        lw = 4
+        plt.plot(fpr, tpr, color='#2e74b5',
+                 lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+        plt.plot([0, 1], [0, 1], color='coral', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate', labelpad=20)
+        plt.ylabel('True Positive Rate', labelpad=20)
+        # plt.title('Receiver operating characteristic +' + title)
+        plt.legend(loc="lower right")
+        if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
+            os.makedirs('../data/Results/RandomForest/' + fea + '/')
+        plt.savefig('../data/Results/RandomForest/' + fea + '/ROC_' + title + '_' + datetime.now().strftime(
+            '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+        tt = timer() - start
+        print("Score: ", auc(fpr, tpr))
+    if plot_pr:
+        p, r, thresholds = precision_recall_curve(y_test, y_predict)
+        plt.figure(figsize=(16, 10))
+        sns.set(font_scale=2)
+        rc = {'axes.labelsize': 26, 'font.size': 12, 'legend.fontsize': 26, 'axes.titlesize': 14,
+              'axes.facecolor': 'deeaf6'}
+        plt.rcParams.update(**rc)
+        lw = 4
+        plt.plot(p, r, color='#2e74b5',
+                 lw=lw, label='PR Curve')
+        # plt.plot(fpr, tpr, color='#2e74b5',
+        #          lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+        plt.plot([0, 1], [0, 1], color='coral', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate', labelpad=20)
+        plt.ylabel('True Positive Rate', labelpad=20)
+        # plt.title('Receiver operating characteristic +' + title)
+        plt.legend(loc="lower right")
+        if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
+            os.makedirs('../data/Results/RandomForest/' + fea + '/')
+        plt.savefig('../data/Results/RandomForest/' + fea + '/PR_' + title + '_' + datetime.now().strftime(
+            '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+        tt = timer() - start
+    if save:
+        np.save('Results/LR_pred.npy', y_predict)
+        np.save('Results/LR_y.npy', y_test)
+    print('Features sorted by their score:', cut)
+    print(pd.DataFrame(
+        sorted(zip(map(lambda x: round(x, 4), rf.feature_importances_), list(train_data_new)),
+               reverse=True)))
+    return roc_auc_score(y_test, y_predict)

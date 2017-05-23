@@ -78,22 +78,27 @@ if __name__ == '__main__':
     titles = ['E-mail', 'Гражданство',
               'Mobile', 'Zodiac', 'DayOfBirth', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество', 'Город']
 
-    find_bestRF(fea='GRID')
+
+    # find_bestRF(fea='GRID', title='v2_')
     # Cutting patronymic:
-    # res = []
-    # for name in trange(1, 6, desc='Name'):
-    #     for pat in trange(2, 10, 2, desc='Patronymic'):
-    #         # res.append(Neural_v2(fea='ToWord', title='Complex', C=1, cut=[name, pat], hidden=(100,)))
-    #         res.append(LR_v2(fea='ToWord', title='Complex', C=10, selectK='best', cut=[name, pat]))
-    # best = max(res)
-    # idx = res.index(best)
-    # np.save('Results/LR_Name_Patr_100.npy', res)
-    # print(idx)
-    # print('Name: ', int(idx)//len(range(2, 10, 2)))
-    # print('Patronymic: ', int(idx) % len(range(2, 10, 2)))
-    # print(max(res))
-    # res = np.load('Results/LR_Name_Patr_100.npy')
+    delete =
+    res = []
+    for name in trange(1, 6, desc='Name'):
+        for pat in trange(2, 10, 2, desc='Patronymic'):
+            # res.append(Neural_v2(fea='ToWord', title='Complex', C=1, cut=[name, pat], hidden=(100,)))
+            res.append(RF_v2(fea='ToWord', est=1000, cut=[name, pat]))
+
+    best = max(res)
+    idx = res.index(best)
+    np.save('Results/RF_Name_Patr_100.npy', res)
+    print(idx)
+    print('Name: ', int(idx)//len(range(2, 10, 2)))
+    print('Patronymic: ', int(idx) % len(range(2, 10, 2)))
+    print(max(res))
+
+    # res = np.load('Results/RF_Name_Patr_100.npy')
     # print(res, max(res))
+    # RF_v2(fea='ToWord', est=1000, cut=[5, 6], plot_auc=True)
     # print(LR_v2(fea='ToWord', title='Complex', C=10, selectK='best', cut=[2, 8]))
 
     # print(Neural_v2(fea='ToWord', title='bestNamePat', C=1, cut=[2, 2], hidden=(50, 50), plot_auc=True, make_pretty=3000))
