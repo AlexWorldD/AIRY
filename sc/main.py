@@ -19,6 +19,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 import seaborn as sns
 from tqdm import tnrange, tqdm_notebook
+from itertools import combinations
 
 # As CONST_VAR for linking features and target
 ID = 'ID (автономер в базе)'
@@ -75,33 +76,42 @@ if __name__ == '__main__':
     # test_logistic_v2(selectK='', fea='Email', title='64bit', t='Targets2016', drop=['Субъект федерации'])
 
     # test_LR(scoring='f1', title='f1')
-    titles = ['E-mail', 'Гражданство',
-              'Mobile', 'Zodiac', 'DayOfBirth', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество', 'Город']
-
+    titles = ['E-mail', 'Гражданство', 'Возраст', 'Пол',
+              'Mobile', 'Zodiac', 'DayOfBirth', 'Субъект федерации', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество',
+              'Город']
+    comb = []
+    complex_clf()
 
     # find_bestRF(fea='GRID', title='v2_')
     # Cutting patronymic:
-    delete =
-    res = []
-    for name in trange(1, 6, desc='Name'):
-        for pat in trange(2, 10, 2, desc='Patronymic'):
-            # res.append(Neural_v2(fea='ToWord', title='Complex', C=1, cut=[name, pat], hidden=(100,)))
-            res.append(RF_v2(fea='ToWord', est=1000, cut=[name, pat]))
-
-    best = max(res)
-    idx = res.index(best)
-    np.save('Results/RF_Name_Patr_100.npy', res)
-    print(idx)
-    print('Name: ', int(idx)//len(range(2, 10, 2)))
-    print('Patronymic: ', int(idx) % len(range(2, 10, 2)))
-    print(max(res))
+    # res = []
+    # for name in trange(150, 250, 10, desc='Name'):
+    #     # for pat in trange(150, 250, 10, desc='Patronymic'):
+    #         # res.append(Neural_v2(fea='ToWord', title='Complex', C=1, cut=[name, pat], hidden=(100,)))
+    #     res.append(RF_v2(fea='ToWord', est=1000, cut=[name, 10],
+    #                          required=['Возраст', 'Город', 'E-mail', 'Субъект федерации', 'Имя', 'DayOfBirth', 'Zodiac']))
+    # np.save('Results/RF_v4_Name_Patr_100.npy', res)
+    # res = list(np.load('Results/RF_v4_Name_Patr_100.npy'))
+    # print(res)
+    # best = max(res)
+    # idx = res.index(best)
+    # print(best, idx)
+    # print('Name: ', range(50, 150, 10)[int(idx)//len(range(50, 150, 10))-1])
+    # print('Patronymic: ', range(50, 150, 10)[int(idx) % len(range(50, 150, 10))-1])
 
     # res = np.load('Results/RF_Name_Patr_100.npy')
     # print(res, max(res))
-    # RF_v2(fea='ToWord', est=1000, cut=[5, 6], plot_auc=True)
-    # print(LR_v2(fea='ToWord', title='Complex', C=10, selectK='best', cut=[2, 8]))
+    # find_bestRF(fea='GRID', title='Names_250', cut=[250, 10],
+    #             required=['Возраст', 'Город', 'E-mail', 'Субъект федерации', 'Имя', 'DayOfBirth', 'Zodiac'],
+    #             )
+    req = ['Возраст', 'Город', 'E-mail', 'Субъект федерации', 'DayOfBirth', 'Mobile', 'Zodiac', 'Отчество']
+    dr = ['Гражданство', 'Пол', 'Отчество', 'Mobile']
+    # print(RF_v2(fea='ToWord', est=1000, cut=[250, 200], required=req,
+    #             name_mod=True))
 
-    # print(Neural_v2(fea='ToWord', title='bestNamePat', C=1, cut=[2, 2], hidden=(50, 50), plot_auc=True, make_pretty=3000))
+    # print(LR_v2(fea='ToWord', title='FeatureSelected', C=10, selectK='best', cut=[2, 8]))
+
+    # print(Neural_v2(fea='ToWord', title='bestNamePat', C=1, cut=[2, 2], hidden=(50, 50)))
     # Neural_v2(fea='ToWord', title='Complex', C=1, cut=[4,8], hidden=(50,50), save=True)
     # LR_v2(title='NewVersionBEST', cut=[4,8], selectK='best', save=True)
     # find_alpha()

@@ -218,8 +218,8 @@ def modify_names(data, popular=False):
     if popular:
         tqdm.pandas(desc="Work with NAME.v2       ")
         data['Имя'] = data['Имя'].progress_apply(popular_names)
-    # tqdm.pandas(desc="Work with patronymic  ")
-    # data['Отчество'] = data['Отчество'].progress_apply(patronymic)
+    tqdm.pandas(desc="Work with patronymic  ")
+    data['Отчество'] = data['Отчество'].progress_apply(patronymic)
     return data
 
 
@@ -842,7 +842,7 @@ def get_mobile(data, mode='Operator'):
     if not mode == 'Operator':
         tmp = data.groupby(by='Mobile').size()
         tmp.sort_values(ascending=False, inplace=True)
-        most_popular = tmp[tmp > 50].index.get_values()
+        most_popular = tmp[tmp > mode].index.get_values()
         data['Mobile'] = data['Mobile'].progress_apply(lambda t: t if (t in most_popular) else '000')
     data.drop('Мобильный телефон', axis=1, inplace=True)
     return data

@@ -48,12 +48,13 @@ def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3',
                  emails=True,
                  mob=True,
                  all=False, use_private=False, clean_target=False, required_titles='', no_split=False,
-                 thin_names=None):
+                 thin_names=None,
+                 phone='Operator'):
     """Loading data from steady CSV-files"""
     # Loading from steady-files:
     types = {'ID (автономер в базе)': np.int64, 'QTotal': np.float64, 'BIN': np.int64, 'Мобильный телефон': np.int64}
     def_drop = ['Фамилия']
-    use = ['QualityRatioTotal']
+    use = ['ID (автономер в базе)', 'QualityRatioTotal']
     if not required_titles == '':
         use.extend(required_titles)
     base = ['ID (автономер в базе)', 'Пол', 'Дата рождения', 'Возраст', 'QualityRatioTotal']
@@ -81,13 +82,14 @@ def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3',
     data_target = binarize_target(pd.read_csv('../data/FULL/' + t + '.csv', delimiter=';', dtype=types)[t_titles])
 
     if clean_target:
-        grouped = data_target.groupby(by='ID (автономер в базе)')
-        data_target = grouped.aggregate(np.sum)
-        data_target['Size'] = data_target['QualityRatioTotal'].apply(np.absolute)
-        data_target['QualityRatioTotal'] = data_target['QualityRatioTotal'].apply(np.sign)
-        data_target = data_target.drop(data_target[data_target['QualityRatioTotal'] == 0].index)
-        base.append('Size')
-        data_target.reset_index(level=0, inplace=True)
+        # grouped = data_target.groupby(by='ID (автономер в базе)')
+        # data_target = grouped.aggregate(np.sum)
+        # data_target['Size'] = data_target['QualityRatioTotal'].apply(np.absolute)
+        # data_target['QualityRatioTotal'] = data_target['QualityRatioTotal'].apply(np.sign)
+        # data_target = data_target.drop(data_target[data_target['QualityRatioTotal'] == 0].index)
+        # base.append('Size')
+        # data_target.reset_index(level=0, inplace=True)
+        data_target = prepare_test_set(data_target)
     # print(data_target.info())
     print("Target: ", data_target.shape)
     # Merge 2 parts of data to one DataFrame
@@ -111,18 +113,20 @@ def load_data_v3(transform_category='OneHot', t='Targets2016', f='FeaturesBIN3',
 
     # ---- NAMES ----
     # print(data)
-    # if name_modification:
-    # data = modify_names(data)
+    if name_modification:
+        data = modify_names(data)
     # ---- Email ----
     if emails:
         data = get_email(data)
     # ---- Add MOBILE ----
     if mob:
-        data = get_mobile(data, mode='Operator')
+        data = get_mobile(data, mode=phone)
     if type(thin_names) is list or thin_names == True:
         data = thin_data(data, cut=thin_names)
+        # data_stat(data)
         # print("After Names cutting...")
         # data_stat(data)
+
     # data.to_excel('FinalDataSet.xlsx')
     # Drop required columns:
     if not def_drop == '':
@@ -153,7 +157,7 @@ def split_data(data):
     return X, Y
 
 
-def prepare_test_set(data, q_min=0.5, q_max=0.5, final=False):
+def prepare_test_set(data, q_min=0.5, q_max=0.5, final=False, stat=False):
     t_t = list(data)
     t_t.remove('QualityRatioTotal')
     grouped = data.groupby(t_t, as_index=False)
@@ -171,6 +175,8 @@ def prepare_test_set(data, q_min=0.5, q_max=0.5, final=False):
     data_target.drop('QualityRatioTotal', axis=1, inplace=True)
     data_target.rename(columns={'QualityRatio': 'QualityRatioTotal'}, inplace=True)
     data_target.columns = data_target.columns.droplevel(1)
+    if stat:
+        print_bar(data_target, tmp='QualityRatioTotal')
     if not final:
         data_target = data_target.drop(data_target[data_target['QualityRatioTotal'] == 0.5].index)
         print("After deleting noise:", data_target.shape)
@@ -362,7 +368,7 @@ def LR(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=Tru
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
           t='Targets2016', required='', cut=[2, 8], no_plot=False, final=False, plot_auc=False, plot_pr=False,
-          save=False, make_pretty=0):
+          save=False, make_pretty=0, _proba=False):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='OneHot', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True, thin_names=cut)
@@ -426,14 +432,14 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
-    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.4, q_max=0.7))
+    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.2, q_max=0.5))
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
     y_predict = pd.DataFrame(lr.fit(train_data_new, train_target).predict_proba(X_test))
     y_predict = np.array(y_predict[1])
     # print(y_predict)
     # print('---', y_test)
-    if make_pretty>0:
+    if make_pretty > 0:
         y_test = y_test[:make_pretty]
         y_predict = y_predict[:make_pretty]
 
@@ -468,15 +474,15 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
               'axes.facecolor': 'deeaf6'}
         plt.rcParams.update(**rc)
         lw = 4
+        plt.axvline(0.5, color='coral', lw=lw, linestyle='--')
         plt.plot(p, r, color='#2e74b5',
                  lw=lw, label='PR Curve')
         # plt.plot(fpr, tpr, color='#2e74b5',
         #          lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
-        plt.plot([0, 1], [0, 1], color='coral', lw=lw, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate', labelpad=20)
-        plt.ylabel('True Positive Rate', labelpad=20)
+        plt.xlabel('Recall ', labelpad=20)
+        plt.ylabel('Precision  ', labelpad=20)
         # plt.title('Receiver operating characteristic +' + title)
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
@@ -487,7 +493,11 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
     if save:
         np.save('Results/LR_pred.npy', y_predict)
         np.save('Results/LR_y.npy', y_test)
-    return roc_auc_score(y_test, y_predict)
+    print(len(y_test))
+    if _proba:
+        return y_predict, y_test
+    else:
+        return roc_auc_score(y_test, y_predict)
 
     print("C parameter is " + str(C))
     print("Score is ", scores.mean())
@@ -670,10 +680,10 @@ def proba(t, a=0.65):
 
 
 def find_alpha(a='LR', b='Neural'):
-    p1 = np.load('Results/'+a+'_pred.npy')
-    p2 = np.load('Results/'+b+'_pred.npy')
-    y1 = np.load('Results/'+a+'_y.npy')
-    y2 = np.load('Results/'+a+'_y.npy')
+    p1 = np.load('Results/' + a + '_pred.npy')
+    p2 = np.load('Results/' + b + '_pred.npy')
+    y1 = np.load('Results/' + a + '_y.npy')
+    y2 = np.load('Results/' + a + '_y.npy')
     print(y1.shape, y2.shape)
     print('Result from ' + a, precision_score(y1, proba(p1)))
     print('Result from ' + b, precision_score(y2, proba(p2)))
@@ -899,7 +909,7 @@ def find_bestNeural(drop='', fea='', scoring='roc_auc', title='', selectK='', fi
 def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
               save=False,
               t='Targets2016', required='', cut=None, no_plot=False, final=False, plot_auc=False, plot_pr=False,
-              hidden=(100,), make_pretty=0):
+              hidden=(100,), make_pretty=0, _proba=False):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='OneHot', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True, thin_names=cut)
@@ -961,7 +971,7 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
-    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.4, q_max=0.7))
+    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.2, q_max=0.5))
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
     y_predict = pd.DataFrame(neural_net.fit(train_data_new, train_target).predict_proba(X_test))
@@ -971,7 +981,7 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
         print("Training set score: %f" % neural_net.score(X_test, y_test))
         print("Training set loss: %f" % neural_net.loss_)
     # print(y_predict)
-    if make_pretty>0:
+    if make_pretty > 0:
         y_test = y_test[:make_pretty]
         y_predict = y_predict[:make_pretty]
     if plot_auc:
@@ -1005,15 +1015,15 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
               'axes.facecolor': 'deeaf6'}
         plt.rcParams.update(**rc)
         lw = 4
+        plt.axvline(0.5, color='coral', lw=lw, linestyle='--')
         plt.plot(p, r, color='#2e74b5',
                  lw=lw, label='PR Curve')
         # plt.plot(fpr, tpr, color='#2e74b5',
         #          lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
-        plt.plot([0, 1], [0, 1], color='coral', lw=lw, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate', labelpad=20)
-        plt.ylabel('True Positive Rate', labelpad=20)
+        plt.xlabel('Recall', labelpad=20)
+        plt.ylabel('Precision', labelpad=20)
         # plt.title('Receiver operating characteristic +' + title)
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/Neural/' + fea + '/'):
@@ -1024,17 +1034,23 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
     if save:
         np.save('Results/Neural_pred.npy', y_predict)
         np.save('Results/Neural_y.npy', y_test)
-    return roc_auc_score(y_test, y_predict)
+    print(len(y_test))
+    if _proba:
+        return y_predict, y_test
+    else:
+        return roc_auc_score(y_test, y_predict)
     # return y_predict, y_test
+
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
-                t='Targets2016', cut=False, parallel=[4, 2]):
+                t='Targets2016', cut=False, parallel=[4, 2], required='', phone='Operator'):
     """Testing linear method for train"""
-    train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True, no_split=True, thin_names=cut)
+    train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True, no_split=True,
+                              thin_names=cut, required_titles=required, phone=phone)
 
     N = [20, 50, 100, 200, 500, 1000]
-    N_v2 = [1000, 5000, 10000]
+    N_v2 = [500, 1000, 2000]
     selected = []
     selected.append('ID (автономер в базе)')
     selected.append('QualityRatioTotal')
@@ -1047,7 +1063,7 @@ def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna
     ]
     grid_light = [
         {'n_estimators': N_v2,
-         'max_features': [0.5, 0.6, 0.7],
+         'max_features': [0.3, 0.4, 0.5],
          'max_depth': [3, 5, 8, 10]
          }
     ]
@@ -1086,12 +1102,9 @@ def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
-    print("Features sorted by their score:")
-    print(pd.DataFrame(sorted(zip(map(lambda x: round(x, 4), np.load('FeatureImportance.npy')), list(train_data_new)),
-                 reverse=True)))
     X_test, y_test = split_data(prepare_test_set(X_test, final=False, q_min=0.4, q_max=0.7))
     print('Test sets: ', X_test.shape, y_test.shape)
-    return
+
     start = timer()
     clf = GridSearchCV(estimator=rf,
                        param_grid=grid_light,
@@ -1133,18 +1146,22 @@ def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna
     results.to_excel(title + 'RF.xlsx')
     np.save('FeatureImportance.npy', clf.best_estimator_.feature_importances_)
     print("Features sorted by their score:")
-    print(pd.DataFrame(sorted(zip(map(lambda x: round(x, 4), clf.best_estimator_.feature_importances_), list(train_data_new)),
-                              reverse=True)))
+    print('Features sorted by their score:', cut)
+    print(pd.DataFrame(
+        sorted(zip(list(train_data_new), map(lambda x: round(x, 4), clf.best_estimator_.feature_importances_)),
+               key=lambda s: s[1],
+               reverse=True)))
     tt = timer() - start
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
           t='Targets2016', required='', cut=[2, 8], final=False, plot_auc=False, plot_pr=False,
-          save=False, make_pretty=0):
+          save=False, make_pretty=0, name_mod=False, mob='Operator', mean_target=False, prepare=True, _proba=False):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True,
-                              required_titles=required, no_split=True, thin_names=cut)
+                              required_titles=required, no_split=True, thin_names=cut, name_modification=name_mod,
+                              phone=mob, clean_target=mean_target)
     # shuffle and split training and test sets
     fnd = False
     selected = []
@@ -1192,14 +1209,17 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
-    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.4, q_max=0.7))
+    if prepare:
+        X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.2, q_max=0.5))
+    else:
+        X_test, y_test = split_data(X_test)
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
     y_predict = pd.DataFrame(rf.fit(train_data_new, train_target).predict_proba(X_test))
     y_predict = np.array(y_predict[1])
     # print(y_predict)
     # print('---', y_test)
-    if make_pretty>0:
+    if make_pretty > 0:
         y_test = y_test[:make_pretty]
         y_predict = y_predict[:make_pretty]
 
@@ -1234,15 +1254,16 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
               'axes.facecolor': 'deeaf6'}
         plt.rcParams.update(**rc)
         lw = 4
+        plt.axvline(0.5, color='coral', lw=lw, linestyle='--')
         plt.plot(p, r, color='#2e74b5',
                  lw=lw, label='PR Curve')
         # plt.plot(fpr, tpr, color='#2e74b5',
         #          lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
-        plt.plot([0, 1], [0, 1], color='coral', lw=lw, linestyle='--')
+        # plt.plot([0.5, 1], [0.5, 0], color='coral', lw=lw, linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate', labelpad=20)
-        plt.ylabel('True Positive Rate', labelpad=20)
+        plt.xlabel('Recall', labelpad=20)
+        plt.ylabel('Precision ', labelpad=20)
         # plt.title('Receiver operating characteristic +' + title)
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
@@ -1255,6 +1276,33 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
         np.save('Results/LR_y.npy', y_test)
     print('Features sorted by their score:', cut)
     print(pd.DataFrame(
-        sorted(zip(map(lambda x: round(x, 4), rf.feature_importances_), list(train_data_new)),
+        sorted(zip(list(train_data_new), map(lambda x: round(x, 4), rf.feature_importances_)), key=lambda s: s[1],
                reverse=True)))
-    return roc_auc_score(y_test, y_predict)
+    print(len(y_test))
+    if _proba:
+        return y_predict, y_test
+    else:
+        return roc_auc_score(y_test, y_predict)
+
+
+def complex_clf():
+    """Special function for complex prediction via simple clfs"""
+    req = ['Возраст', 'Город', 'E-mail', 'Субъект федерации', 'DayOfBirth', 'Mobile', 'Zodiac', 'Отчество']
+    y_test = []
+    y_pred = []
+    p, t = LR_v2(fea='ToWord', title='FeatureSelected', C=10, selectK='best', cut=[2, 8], _proba=True)
+    print('LR COMPLETED!')
+    y_test.append(t)
+    y_pred.append(p)
+    p, t = RF_v2(fea='ToWord', est=1000, cut=[250, 200], required=req, name_mod=True, _proba=True)
+    print('RF COMPLETED!')
+    y_test.append(t)
+    y_pred.append(p)
+    p, t = Neural_v2(fea='ToWord', title='bestNamePat', C=1, cut=[2, 2], hidden=(50, 50), _proba=True)
+    print('NEURAL COMPLETED!')
+    y_test.append(t)
+    y_pred.append(p)
+    np.save('Results/PREDICTED.npy', y_pred)
+    np.save('Results/TRUE.npy', y_test)
+    Y = pd.DataFrame(y_test)
+    print(Y)
