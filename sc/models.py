@@ -25,6 +25,10 @@ def f_measure2(p1, p2, alpha=0.5):
     return alpha * p1 + (1 - alpha) * p2
 
 
+def f_measure_v3(p1, p2, p3, alpha=0.33, beta=0.33):
+    return alpha * p1 + beta * p2 + (1 - alpha - beta) * p3
+
+
 def thin_data(data, dict={'Имя': 2, 'Отчество': 1}, cut=None):
     if type(cut) is list:
         dict['Имя'] = cut[0]
@@ -368,7 +372,7 @@ def LR(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=Tru
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
           t='Targets2016', required='', cut=[2, 8], no_plot=False, final=False, plot_auc=False, plot_pr=False,
-          save=False, make_pretty=0, _proba=False):
+          save=False, make_pretty=0, _proba=False, q=[0.2, 0.5], seed=241):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='OneHot', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True, thin_names=cut)
@@ -427,12 +431,12 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
         print("NO features selection!")
 
     train_data_new, X_test = train_test_split(train_data_new, test_size=.3,
-                                              random_state=241)
+                                              random_state=seed)
     print("Splitting to train and test sets completed!")
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
-    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.2, q_max=0.5))
+    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=q[0], q_max=q[1]))
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
     y_predict = pd.DataFrame(lr.fit(train_data_new, train_target).predict_proba(X_test))
@@ -462,7 +466,7 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
             os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
-        plt.savefig('../data/Results/LogisticRegression/' + fea + '/ROC_' + title + '_' + datetime.now().strftime(
+        plt.savefig('../data/Results/LogisticRegression/' + fea + '/ROC_LR' + title + '_' + datetime.now().strftime(
             '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
         tt = timer() - start
         print("Score: ", auc(fpr, tpr))
@@ -474,8 +478,11 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
               'axes.facecolor': 'deeaf6'}
         plt.rcParams.update(**rc)
         lw = 4
-        plt.axvline(0.5, color='coral', lw=lw, linestyle='--')
-        plt.plot(p, r, color='#2e74b5',
+        cur_pre = stone_point(r, p)
+        plt.axvline(0.3, ymax=cur_pre - 0.025, color='coral', lw=lw, linestyle='--')
+        plt.axhline(cur_pre, xmax=0.3, color='coral', lw=lw, linestyle='--')
+        plt.text(0.1, cur_pre - 0.06, cur_pre, fontsize=18)
+        plt.plot(r, p, color='#2e74b5',
                  lw=lw, label='PR Curve')
         # plt.plot(fpr, tpr, color='#2e74b5',
         #          lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
@@ -487,7 +494,7 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/LogisticRegression/' + fea + '/'):
             os.makedirs('../data/Results/LogisticRegression/' + fea + '/')
-        plt.savefig('../data/Results/LogisticRegression/' + fea + '/PR_' + title + '_' + datetime.now().strftime(
+        plt.savefig('../data/Results/LogisticRegression/' + fea + '/PR_LR' + title + '_' + datetime.now().strftime(
             '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
         tt = timer() - start
     if save:
@@ -495,6 +502,9 @@ def LR_v2(drop='', C=1, fea='', scoring='roc_auc', title='', selectK='', fillna=
         np.save('Results/LR_y.npy', y_test)
     print(len(y_test))
     if _proba:
+        # print('-------SCORES ---------')
+        # print(recall_score(y_test, y_predict))
+        # print(precision_score(y_test, y_predict))
         return y_predict, y_test
     else:
         return roc_auc_score(y_test, y_predict)
@@ -671,12 +681,13 @@ def different_features():
         '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
 
 
-def proba(t, a=0.65):
-    m = t > a
-    m2 = t <= a
-    t[m] = 1
-    t[m2] = 0
-    return t
+def proba(t, a=0.5):
+    tmp = t.copy()
+    m = tmp > a
+    m2 = tmp <= a
+    tmp[m] = 1
+    tmp[m2] = 0
+    return tmp
 
 
 def find_alpha(a='LR', b='Neural'):
@@ -909,7 +920,7 @@ def find_bestNeural(drop='', fea='', scoring='roc_auc', title='', selectK='', fi
 def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
               save=False,
               t='Targets2016', required='', cut=None, no_plot=False, final=False, plot_auc=False, plot_pr=False,
-              hidden=(100,), make_pretty=0, _proba=False):
+              hidden=(100,), make_pretty=0, _proba=False, q=[0.2, 0.5], seed=241):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='OneHot', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True, thin_names=cut)
@@ -966,12 +977,12 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
         print("NO features selection!")
 
     train_data_new, X_test = train_test_split(train_data_new, test_size=.3,
-                                              random_state=241)
+                                              random_state=seed)
     print("Splitting to train and test sets completed!")
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
-    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.2, q_max=0.5))
+    X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=q[0], q_max=q[1]))
     print('Test sets: ', X_test.shape, y_test.shape)
     start = timer()
     y_predict = pd.DataFrame(neural_net.fit(train_data_new, train_target).predict_proba(X_test))
@@ -1003,7 +1014,7 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/Neural/' + fea + '/'):
             os.makedirs('../data/Results/Neural/' + fea + '/')
-        plt.savefig('../data/Results/Neural/' + fea + '/ROC_' + title + '_' + datetime.now().strftime(
+        plt.savefig('../data/Results/Neural/' + fea + '/ROC_Neural' + title + '_' + datetime.now().strftime(
             '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
         tt = timer() - start
         print("Score: ", auc(fpr, tpr))
@@ -1015,8 +1026,11 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
               'axes.facecolor': 'deeaf6'}
         plt.rcParams.update(**rc)
         lw = 4
-        plt.axvline(0.5, color='coral', lw=lw, linestyle='--')
-        plt.plot(p, r, color='#2e74b5',
+        cur_pre = stone_point(r, p)
+        plt.axvline(0.3, ymax=cur_pre - 0.025, color='coral', lw=lw, linestyle='--')
+        plt.axhline(cur_pre, xmax=0.3, color='coral', lw=lw, linestyle='--')
+        plt.text(0.1, cur_pre - 0.06, cur_pre, fontsize=18)
+        plt.plot(r, p, color='#2e74b5',
                  lw=lw, label='PR Curve')
         # plt.plot(fpr, tpr, color='#2e74b5',
         #          lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
@@ -1028,7 +1042,7 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/Neural/' + fea + '/'):
             os.makedirs('../data/Results/Neural/' + fea + '/')
-        plt.savefig('../data/Results/Neural/' + fea + '/PR_' + title + '_' + datetime.now().strftime(
+        plt.savefig('../data/Results/Neural/' + fea + '/PR_Neural' + title + '_' + datetime.now().strftime(
             '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
         tt = timer() - start
     if save:
@@ -1036,10 +1050,13 @@ def Neural_v2(drop='', C=0.01, fea='', scoring='roc_auc', title='', selectK='', 
         np.save('Results/Neural_y.npy', y_test)
     print(len(y_test))
     if _proba:
+        # print('-------SCORES ---------')
+        # print(recall_score(y_test, y_predict))
+        # print(precision_score(y_test, y_predict))
         return y_predict, y_test
     else:
         return roc_auc_score(y_test, y_predict)
-    # return y_predict, y_test
+        # return y_predict, y_test
 
 
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
@@ -1154,10 +1171,20 @@ def find_bestRF(drop='', fea='', scoring='roc_auc', title='', selectK='', fillna
     tt = timer() - start
 
 
+def stone_point(r, p):
+    _r = r.copy()
+    _r = _r[::-1]
+    item_idx = np.where(_r >= 0.3)[0][0]
+    _p = p.copy()
+    cur_prec = _p[len(_p) - item_idx]
+    return cur_prec
+
+
 # ----------------------------------------- Test Logistic Regression  -------------------------------------
 def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fillna=True, f='FeaturesBIN3',
-          t='Targets2016', required='', cut=[2, 8], final=False, plot_auc=False, plot_pr=False,
-          save=False, make_pretty=0, name_mod=False, mob='Operator', mean_target=False, prepare=True, _proba=False):
+          t='Targets2016', required='', cut=[2, 8], final=False, plot_auc=False, plot_pr=False, seed=241,
+          save=False, make_pretty=0, name_mod=False, mob='Operator', mean_target=False, prepare=True, _proba=False,
+          q=[0.2, 0.5]):
     """Testing linear method for train"""
     train_data = load_data_v3(transform_category='LabelsEncode', t=t, f=f, drop=drop, all=True,
                               required_titles=required, no_split=True, thin_names=cut, name_modification=name_mod,
@@ -1204,13 +1231,13 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
         print("NO features selection!")
 
     train_data_new, X_test = train_test_split(train_data, test_size=.3,
-                                              random_state=241)
+                                              random_state=seed)
     print("Splitting to train and test sets completed!")
     print(train_data_new.shape, X_test.shape)
     train_data_new, train_target = split_data(train_data_new)
     print('Train sets: ', train_data_new.shape, train_target.shape)
     if prepare:
-        X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=0.2, q_max=0.5))
+        X_test, y_test = split_data(prepare_test_set(X_test, final=final, q_min=q[0], q_max=q[1]))
     else:
         X_test, y_test = split_data(X_test)
     print('Test sets: ', X_test.shape, y_test.shape)
@@ -1242,7 +1269,7 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
             os.makedirs('../data/Results/RandomForest/' + fea + '/')
-        plt.savefig('../data/Results/RandomForest/' + fea + '/ROC_' + title + '_' + datetime.now().strftime(
+        plt.savefig('../data/Results/RandomForest/' + fea + '/ROC_RF' + title + '_' + datetime.now().strftime(
             '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
         tt = timer() - start
         print("Score: ", auc(fpr, tpr))
@@ -1254,8 +1281,11 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
               'axes.facecolor': 'deeaf6'}
         plt.rcParams.update(**rc)
         lw = 4
-        plt.axvline(0.5, color='coral', lw=lw, linestyle='--')
-        plt.plot(p, r, color='#2e74b5',
+        cur_pre = stone_point(r, p)
+        plt.axvline(0.3, ymax=cur_pre - 0.025, color='coral', lw=lw, linestyle='--')
+        plt.axhline(cur_pre, xmax=0.3, color='coral', lw=lw, linestyle='--')
+        plt.text(0.1, cur_pre - 0.06, cur_pre, fontsize=18)
+        plt.plot(r, p, color='#2e74b5',
                  lw=lw, label='PR Curve')
         # plt.plot(fpr, tpr, color='#2e74b5',
         #          lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
@@ -1268,7 +1298,7 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
         plt.legend(loc="lower right")
         if not os.path.exists('../data/Results/RandomForest/' + fea + '/'):
             os.makedirs('../data/Results/RandomForest/' + fea + '/')
-        plt.savefig('../data/Results/RandomForest/' + fea + '/PR_' + title + '_' + datetime.now().strftime(
+        plt.savefig('../data/Results/RandomForest/' + fea + '/PR_RF' + title + '_' + datetime.now().strftime(
             '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
         tt = timer() - start
     if save:
@@ -1280,6 +1310,9 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
                reverse=True)))
     print(len(y_test))
     if _proba:
+        # print('-------SCORES ---------')
+        # print(recall_score(y_test, y_predict))
+        # print(precision_score(y_test, y_predict))
         return y_predict, y_test
     else:
         return roc_auc_score(y_test, y_predict)
@@ -1288,21 +1321,120 @@ def RF_v2(drop='', est=1000, fea='', scoring='roc_auc', title='', selectK='', fi
 def complex_clf():
     """Special function for complex prediction via simple clfs"""
     req = ['Возраст', 'Город', 'E-mail', 'Субъект федерации', 'DayOfBirth', 'Mobile', 'Zodiac', 'Отчество']
-    y_test = []
-    y_pred = []
-    p, t = LR_v2(fea='ToWord', title='FeatureSelected', C=10, selectK='best', cut=[2, 8], _proba=True)
+    quality = [0.00001, 0.05]
+    seed_n = 241
+    # quality = [0.5, 0.5]
+    y_test = dict()
+    y_pred = dict()
+    p, t = LR_v2(fea='ToWord', title='FINAL', C=10, selectK='best', cut=[2, 8], plot_pr=True,
+                 plot_auc=True, q=quality,
+                 _proba=True, seed=seed_n)
     print('LR COMPLETED!')
-    y_test.append(t)
-    y_pred.append(p)
-    p, t = RF_v2(fea='ToWord', est=1000, cut=[250, 200], required=req, name_mod=True, _proba=True)
+    y_test['LR'] = t
+    y_pred['LR'] = p
+    p, t = RF_v2(fea='ToWord', title='FINAL', est=1000, cut=[250, 200], required=req, name_mod=True, plot_pr=True,
+                 plot_auc=True,
+                 _proba=True, q=quality, seed=seed_n)
     print('RF COMPLETED!')
-    y_test.append(t)
-    y_pred.append(p)
-    p, t = Neural_v2(fea='ToWord', title='bestNamePat', C=1, cut=[2, 2], hidden=(50, 50), _proba=True)
+    y_test['RF'] = t
+    y_pred['RF'] = p
+    p, t = Neural_v2(fea='ToWord', title='FINAL', C=1, cut=[2, 2], hidden=(50, 50), plot_pr=True, plot_auc=True,
+                     _proba=True, q=quality, seed=seed_n)
     print('NEURAL COMPLETED!')
-    y_test.append(t)
-    y_pred.append(p)
+    y_test['NEURAL'] = t
+    y_pred['NEURAL'] = p
     np.save('Results/PREDICTED.npy', y_pred)
     np.save('Results/TRUE.npy', y_test)
-    Y = pd.DataFrame(y_test)
-    print(Y)
+    print('COMPLEX CLF completed!')
+
+
+def final_WTF(a, b, plot_auc=True, plot_pr=True):
+    PREDICTED = np.load('Results/PREDICTED.npy').item()
+    TRUE = np.load('Results/TRUE.npy').item()
+    print(pd.DataFrame(PREDICTED))
+    y_predict = f_measure_v3(PREDICTED['NEURAL'], PREDICTED['RF'], PREDICTED['LR'], alpha=a, beta=b)
+    y_test = TRUE['LR']
+    if plot_auc:
+        fpr, tpr, thresholds = roc_curve(y_test, y_predict)
+        plt.figure(figsize=(16, 10))
+        sns.set(font_scale=2)
+        rc = {'axes.labelsize': 26, 'font.size': 12, 'legend.fontsize': 26, 'axes.titlesize': 14,
+              'axes.facecolor': 'deeaf6'}
+        plt.rcParams.update(**rc)
+        lw = 4
+        plt.plot(fpr, tpr, color='#2e74b5',
+                 lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+        plt.plot([0, 1], [0, 1], color='coral', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate', labelpad=20)
+        plt.ylabel('True Positive Rate', labelpad=20)
+        # plt.title('Receiver operating characteristic +' + title)
+        plt.legend(loc="lower right")
+        if not os.path.exists('../data/Results/FINAL/'):
+            os.makedirs('../data/Results/FINAL/')
+        plt.savefig('../data/Results/FINAL/ROC_FINAL_' + datetime.now().strftime(
+            '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+        print("Score: ", auc(fpr, tpr))
+    if plot_pr:
+        p, r, thresholds = precision_recall_curve(y_test, y_predict)
+        plt.figure(figsize=(16, 10))
+        sns.set(font_scale=2)
+        rc = {'axes.labelsize': 26, 'font.size': 12, 'legend.fontsize': 26, 'axes.titlesize': 14,
+              'axes.facecolor': 'deeaf6'}
+        plt.rcParams.update(**rc)
+        lw = 4
+        cur_pre = stone_point(r, p)
+        plt.axvline(0.3, ymax=cur_pre - 0.025, color='coral', lw=lw, linestyle='--')
+        plt.axhline(cur_pre, xmax=0.3, color='coral', lw=lw, linestyle='--')
+        plt.text(0.1, cur_pre - 0.06, cur_pre, fontsize=18)
+        plt.plot(r, p, color='#2e74b5',
+                 lw=lw, label='PR Curve')
+        # plt.plot(fpr, tpr, color='#2e74b5',
+        #          lw=lw, label='ROC curve (area = %0.3f)' % auc(fpr, tpr))
+        # plt.plot([0.5, 1], [0.5, 0], color='coral', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('Recall', labelpad=20)
+        plt.ylabel('Precision ', labelpad=20)
+        # plt.title('Receiver operating characteristic +' + title)
+        plt.legend(loc="lower right")
+        if not os.path.exists('../data/Results/FINAL/'):
+            os.makedirs('../data/Results/FINAL/')
+        plt.savefig('../data/Results/FINAL/PR_FINAL_' + datetime.now().strftime(
+            '%d_%H%M') + '.png', bbox_inches='tight', dpi=300)
+
+
+def find_COMPLEX_clf():
+    PREDICTED = np.load('Results/PREDICTED.npy').item()
+    TRUE = np.load('Results/TRUE.npy').item()
+    # print(PREDICTED)
+    # print(TRUE)
+    a = 0.53
+    for k in PREDICTED:
+        print('Result from ' + k, precision_score(TRUE[k], proba(PREDICTED[k], a=a)))
+        print('Result from ' + k, recall_score(TRUE[k], proba(PREDICTED[k], a=a)))
+    complex = []
+    b_alpha = []
+    b_beta = []
+    # for _a in trange(30, desc='Searching best alpha'):
+    for alpha in np.linspace(0, 1, 200):
+        for beta in np.linspace(0, 1, 200):
+            # res = fbeta_score(y1, proba(f_measure2(p1, p2, alpha=st)), beta=0.15)
+            if alpha + beta <= 1:
+                # cur = proba(f_measure_v3(PREDICTED['LR'], PREDICTED['RF'], PREDICTED['NEURAL'],
+                #                                          alpha=alpha, beta=beta), a=a)
+                cur = proba(f_measure_v3(PREDICTED['NEURAL'], PREDICTED['RF'], PREDICTED['LR'],
+                                         alpha=alpha, beta=beta), a=a)
+                res = precision_score(TRUE['LR'], cur)
+                if recall_score(TRUE['LR'], cur) > 0.3:
+                    complex.append(res)
+                    b_alpha.append(alpha)
+                    b_beta.append(beta)
+
+    score_best = max(complex)
+    idx = complex.index(score_best)
+    print('Best score: Precision=' + str(score_best))
+    print('Alpha: ', b_alpha[idx])
+    print('Beta: ', b_beta[idx])
+    # roc_score(y1, f_measure2(p1, p2, alpha=alpha))

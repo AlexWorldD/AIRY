@@ -80,7 +80,15 @@ if __name__ == '__main__':
               'Mobile', 'Zodiac', 'DayOfBirth', 'Субъект федерации', 'MonthOfBirth', 'DayOfWeek', 'Имя', 'Отчество',
               'Город']
     comb = []
-    complex_clf()
+    alpha = 0.165829145729
+    beta = 0.467336683417
+    # quality = [0.00001, 0.05]
+    # p, t = LR_v2(fea='ToWord', title='FeatureSelected', C=10, selectK='best', cut=[2, 8], plot_pr=True,
+    #              plot_auc=False, q=quality,
+    #              _proba=True)
+    # complex_clf()
+    # find_COMPLEX_clf()
+    final_WTF(a=alpha, b=beta)
 
     # find_bestRF(fea='GRID', title='v2_')
     # Cutting patronymic:
@@ -109,7 +117,7 @@ if __name__ == '__main__':
     # print(RF_v2(fea='ToWord', est=1000, cut=[250, 200], required=req,
     #             name_mod=True))
 
-    # print(LR_v2(fea='ToWord', title='FeatureSelected', C=10, selectK='best', cut=[2, 8]))
+    # print(LR_v2(fea='ToWord', title='FeatureSelected', C=10, selectK='best', cut=[2, 8], plot_pr=True))
 
     # print(Neural_v2(fea='ToWord', title='bestNamePat', C=1, cut=[2, 2], hidden=(50, 50)))
     # Neural_v2(fea='ToWord', title='Complex', C=1, cut=[4,8], hidden=(50,50), save=True)
